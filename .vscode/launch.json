@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      // Main class configuration
+      {
+        "type": "scala",
+        "request": "launch",
+        // configuration name visible for the user
+        "name": "Launch Main",
+        // full name of the class to run
+        "mainClass": "cogent.main",
+        // optional arguments for the main class
+        "args": [],
+        // optional jvm properties to use
+        "jvmOptions": []
+      }
+    ]
+  }
