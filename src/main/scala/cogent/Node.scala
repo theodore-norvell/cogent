@@ -3,6 +3,7 @@ package cogent
 enum Node derives CanEqual:
     case BasicState( stateInfo : StateInformation )
     case StartMarker( stateInfo : StateInformation )
+    case BranchPseudoState( stateInfo : StateInformation )
     case OrState( stateInfo : StateInformation, children : Seq[Node] ) 
         var optStartingIndex : Option[Int] = None 
     case AndState( stateInfo : StateInformation, children : Seq[Node] )
@@ -15,6 +16,8 @@ enum Node derives CanEqual:
             n match 
                 case BasicState( si ) => 
                     s"${indent1}Basic State\n${indent}${si.toString}\n"
+                case BranchPseudoState( si ) =>
+                    s"${indent1}Branch Pseudo-state\n${indent}${si.toString}\n"
                 case StartMarker( si ) =>
                     s"${indent1}Start Pseudo-state\n${indent}${si.toString}\n"
                 case OrState( si, children ) =>
@@ -37,6 +40,7 @@ enum Node derives CanEqual:
     def getName : String =
         this match
         case BasicState(si) => si.name 
+        case BranchPseudoState(si) => si.name
         case StartMarker( si ) => si.name
         case OrState( si, children ) => si.name
         case AndState( si, children ) => si.name

@@ -1,7 +1,7 @@
 
 // The simplest possible sbt build file is just one line:
 
-scalaVersion := "3.0.0"
+scalaVersion := "3.0.1"
 // That is, to create a valid sbt build, all you've got to do is define the
 // version of Scala you'd like your project to use.
 
@@ -45,6 +45,16 @@ version := "1.0"
 // scala/scala-parser-combinators Scaladex page,
 // https://index.scala-lang.org/scala/scala-parser-combinators, you can copy/paste
 // the sbt dependency from the sbt box on the right-hand side of the screen.
+
+libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.0.0"
+
+
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9"
+
+// libraryDependencies += "org.scalactic" %% "scalactic" % "3.2.9"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+
+logBuffered in Test := false
 
 // IMPORTANT NOTE: while build files look _kind of_ like regular Scala, it's
 // important to note that syntax in *.sbt files doesn't always behave like

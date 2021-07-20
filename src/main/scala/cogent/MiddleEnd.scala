@@ -3,7 +3,7 @@ package cogent
 import scala.util.{Try,Success,Failure}
 import scala.collection.immutable.IntMapEntryIterator
 
-object MiddleEnd :
+class MiddleEnd(val logger : Logger) :
 
     import net.sourceforge.plantuml.BlockUml
     import net.sourceforge.plantuml.core.Diagram
@@ -15,8 +15,11 @@ object MiddleEnd :
     import net.sourceforge.plantuml.cucadiagram.LeafType
     import net.sourceforge.plantuml.cucadiagram.Link
     import net.sourceforge.plantuml.cucadiagram.Display
-    import scala.collection.JavaConverters
+    import scala.jdk.CollectionConverters._
     import scala.collection.mutable
+
+    import Logger.Level._
+
 
     def processBlocks( blockList : Iterable[BlockUml] ) : Unit =
         for block <- blockList do
@@ -31,19 +34,21 @@ object MiddleEnd :
         case _ => reportWarning( "Diagram is not a state diagram" )
 
     def constructStateChart( stateDiagram : StateDiagram ) : StateChart =
-        // First 
+        // First: recursively walk the tree of PlantUML entities (states and state-like things) in
+        // `stateDiagram`.  For each entity we create a corresponding `cogent.Node`.  `entityToNodeMutMap`
+        // records a mapping from IEntity objects to `Node` objects.
         val rootGroup : IGroup = stateDiagram.getRootGroup()
-        val links : Seq[Link] = JavaConverters.asScala( stateDiagram.getLinks() ).toSeq
+        val junk : mutable.Map[IEntity,Node] = new mutable.HashMap[IEntity,Node]()
+        val entityToNodeMutMap = mutable.HashMap[IEntity, Node]()
+
+        extractState( 0,  0, "", rootGroup, junk, entityToNodeMutMap )
 
         // Second, we find a Higraph node that represents the root state.
         // This will always be an OR State.  This is a tree that includes all
         // states in it.  We also create a mapping from PlantUML entities (IEntity)
         // to cogent.Node objects.
-        val map : mutable.Map[IEntity,Node] = new mutable.HashMap[IEntity,Node]()
-        val entityToNodeMutMap = mutable.HashMap[IEntity, Node]()
-        extractState( 0,  0, "", rootGroup, map, entityToNodeMutMap )
-        val rootState : Node = map.apply( rootGroup )
-        println( s"The root of the tree is\n${rootState.show}" )
+        val rootState : Node = entityToNodeMutMap.apply( rootGroup )
+        logger.log( Debug, s"The root of the tree is\n${rootState.show}" )
         assert( rootState.isInstanceOf[Node.OrState] )
         val entityToNodeMap = entityToNodeMutMap.toMap
         val nodeSet = entityToNodeMap.values.toSet
@@ -54,14 +59,15 @@ object MiddleEnd :
         computeParentMap( rootState, parentMutMap ) 
         val parentMap = parentMutMap.toMap
 
-        // Fourth, we turn PlatUML edges into cogent.Edge objects.
+        // Fourth, we turn PlantUML edges into cogent.Edge objects.
+        val links : Seq[Link] = stateDiagram.getLinks().asScala.toSeq
         val edgeMutSet = mutable.Set[Edge]()
         extractEdgesFromLinks( links, rootState, parentMap, entityToNodeMap, edgeMutSet )
 
         val edgeSet = edgeMutSet.toSet
 
         val stateChart = StateChart( rootState, nodeSet, edgeSet, parentMap )
-        println( stateChart.show )
+        logger.log( Debug, stateChart.show )
         return stateChart
     end constructStateChart
 
@@ -74,15 +80,15 @@ object MiddleEnd :
     ) : Unit =
         val name = (if depth == 0 then "root" else group.getCode().getName() + "_" + parent_name)
 
-        // println( s"Processing group $name")
-        val leafChildren = JavaConverters.asScala( group.getLeafsDirect() ).toSeq
-        val groupChildren = JavaConverters.asScala( group.getChildren() ).toSeq
+        // logger.log( Debug, s"Processing group $name")
+        val leafChildren = group.getLeafsDirect().asScala.toSeq
+        val groupChildren = group.getChildren().asScala.toSeq
         val relevantLeafChildren = filterLeaves( leafChildren )
         val relevantGroupChildren = filterGroups( groupChildren )
         val concurrentStates = relevantGroupChildren
             .filter( (childGroup) =>
                         childGroup.getGroupType() == GroupType.CONCURRENT_STATE )
-        // println( s"""... It has ${relevantLeafChildren.size} leaves
+        // logger.log( Debug, s"""... It has ${relevantLeafChildren.size} leaves
         //             |... and ${relevantGroupChildren.size} groups 
         //             |... of which ${concurrentStates.size} are concurrent.""".stripMargin)
 
@@ -93,18 +99,18 @@ object MiddleEnd :
         // AND states have at least on child and all its children are CONCURRENT_STATEs
         else if(   relevantLeafChildren.size == 0
                 && concurrentStates.size == relevantGroupChildren.size  ) then
-            // println( s"State $name identified as an AND state" )
+            // logger.log( Debug, s"State $name identified as an AND state" )
             makeANDState( depth, index, group, name, sink, relevantGroupChildren, entityToNodeMap )
 
         // OR states contain no CONCURRENT_STATEs but have at least one child.
         else if( concurrentStates.size == 0 ) then
-            // println( s"State $name identified as an OR state" )
+            // logger.log( Debug, s"State $name identified as an OR state" )
             makeORState( depth, index, group, name, sink, relevantLeafChildren, relevantGroupChildren, entityToNodeMap )
         
         // Otherwise there are some children that are concurrent states and some that aren't.
         else 
             reportError( s"Node $name has ${concurrentStates.size} regions "
-                 + s"... but it also has other children. This seems wrong.")
+                    + s"... but it also has other children. This seems wrong.")
     end extractState
 
     def extractState(   depth : Int,
@@ -120,6 +126,8 @@ object MiddleEnd :
             leaf.getLeafType() match
                 case LeafType.STATE => Node.BasicState( stateInfo )
                 case LeafType.CIRCLE_START => Node.StartMarker( stateInfo )
+                case LeafType.STATE_CHOICE => Node.BranchPseudoState( stateInfo )
+                case _ => assert( false, "States should be filtered.")
         addState( leaf, node, sink, entityToNodeMap )
     end extractState
 
@@ -177,19 +185,19 @@ object MiddleEnd :
     end addState
 
     def reportError( message : String ) : Unit =
-        println( message )
+        logger.log( Fatal, message )
     
 
     def reportWarning( message : String ) : Unit =
-        println( message )
+        logger.log( Warning, message )
 
     def filterLeaves( leaves : Seq[ILeaf] ) : Seq[ILeaf] =
         leaves.filter( (leaf) =>
             leaf.getLeafType() match
-            case LeafType.STATE => true
+            case LeafType.STATE =>
+                true
             case LeafType.STATE_CHOICE =>
-                reportError( "Choice pseudo-states are not supported yet.")
-                false 
+                true
             case LeafType.DEEP_HISTORY =>
                 reportError( "History pseudo-states are not supported yet.")
                 false 
@@ -225,7 +233,8 @@ object MiddleEnd :
 
     def computeParentMap( node : Node, parentMap : mutable.Map[Node, Node] ) : Unit =
         node match
-            case Node.BasicState( si ) => 
+            case Node.BasicState( si ) =>
+            case Node.BranchPseudoState( si ) => 
             case Node.StartMarker( si ) =>
             case Node.OrState( si, children ) =>
                 for child <- children do
@@ -240,6 +249,13 @@ object MiddleEnd :
                     computeParentMap( child, parentMap )
     end computeParentMap
 
+    def display2String( display : Display ) : String = 
+        if display == null then ""
+        else if display.size() == 0 then ""
+        else display.iterator().asScala.toSeq
+             .map( charSeq => charSeq.toString + "\n")
+             .foldRight("")( (a,b) => a+b )
+
     def extractEdgesFromLinks(  links : Seq[Link],
                                 rootState : Node,
                                 parentMap : Map[Node,Node],
@@ -247,20 +263,27 @@ object MiddleEnd :
                                 edgeSet : mutable.Set[Edge] ) : Unit =
         for link <- links do
             val source = link.getEntity1()
-            val target = link.getEntity1()
+            val target = link.getEntity2()
             if !(entityToNodeMap contains source) || !(entityToNodeMap contains target) then
                 reportWarning(s"Link from ${source.getCode().getName()} to ${source.getCode().getName()} ignored.")
             else 
                 val sourceNode = entityToNodeMap.apply( source )
                 val targetNode = entityToNodeMap.apply( target )
                 val label = link.getLabel()
-                val labelAsString = if label != null then label.toString() else ""
-                // TODO Parse the label
-                val eventNameOpt : Option[String] = None
-                val guardNameOpt : Option[String] = None
-                val actions : Seq[String] = Seq.empty[String]
-                val edge = Edge(sourceNode, targetNode, eventNameOpt, guardNameOpt, actions ) 
-                edgeSet.add( edge ) 
+                val labelAsString = display2String( label ) 
+                val result : parsers.ParseResult[(Option[Trigger], Option[Guard], Seq[Action] )] =  parsers.parseEdgeLabel(labelAsString)
+                logger.log( Debug, s"Parser input <<${labelAsString}>>")
+                logger.log( Debug, s"Parser result ${result}.")
+                val edge = result match
+                    case parsers.Success( (triggerOpt, guardOpt, actions), _ ) =>
+                        Edge(sourceNode, targetNode, triggerOpt, guardOpt, actions ) 
+                    case parsers.Failure( message, _) =>
+                        reportError( message  )
+                        Edge(sourceNode, targetNode, None, None, List.empty ) 
+                    case parsers.Error( message, _) =>
+                        reportError( message  )
+                        Edge(sourceNode, targetNode, None, None, List.empty )  
+                edgeSet.add( edge )
             end if
         end for
     end extractEdgesFromLinks

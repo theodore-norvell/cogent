@@ -11,7 +11,10 @@
         [*] -> F
         state F
         state G
-        F -> G: a / y
+        state H <<choice>>
+        F -> H: a / y
+        H -> F: [ok] 
+        H -> G: [else]
         --
         state W : label
     }
