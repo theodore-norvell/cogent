@@ -1,5 +1,4 @@
 @startuml
-    [*] -> A
     state A {
         note "B" as B
         [*] -> C
@@ -15,7 +14,10 @@
         F -> H: a / y
         H -> F: [ok] 
         H -> G: [else]
+        F --> E : XYZ
         --
+        [*] -> W
         state W : label
     }
+    state A
 @enduml

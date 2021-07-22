@@ -1,12 +1,54 @@
 package cogent
 
-enum Node derives CanEqual:
-    case BasicState( stateInfo : StateInformation )
-    case StartMarker( stateInfo : StateInformation )
-    case BranchPseudoState( stateInfo : StateInformation )
-    case OrState( stateInfo : StateInformation, children : Seq[Node] ) 
-        var optStartingIndex : Option[Int] = None 
-    case AndState( stateInfo : StateInformation, children : Seq[Node] )
+enum Node derives CanEqual :
+    val stateInfo : StateInformation 
+
+    case BasicState( override val stateInfo : StateInformation )
+
+    case OrState( override val stateInfo : StateInformation, children : Seq[Node] ) 
+        var optStartingIndex : Option[Int] = None
+
+    case AndState( override val stateInfo : StateInformation, children : Seq[Node] ) 
+
+    case StartMarker( override val stateInfo : StateInformation )
+    
+    case ChoicePseudoState( override val stateInfo : StateInformation )
+
+    def isState : Boolean = 
+        this match 
+            case BasicState( _ ) => true
+            case OrState( _, _ ) => true
+            case AndState( _, _ ) => true
+            case StartMarker( _ ) => false
+            case ChoicePseudoState( _ ) => false
+    end isState
+    
+    def isStartNode : Boolean = 
+        this match 
+            case BasicState( _ ) => false
+            case OrState( _, _ ) => false
+            case AndState( _, _ ) => false
+            case StartMarker( _ ) => true
+            case ChoicePseudoState( _ ) => false
+    end isStartNode
+    
+    def asOrState : Option[OrState] = 
+        this match 
+            case BasicState( _ ) => None
+            case x @ OrState( _, _ ) => Some( x )
+            case AndState( _, _ ) => None
+            case StartMarker( _ ) => None
+            case ChoicePseudoState( _ ) => None
+    end asOrState
+    
+    def childStates : Seq[Node] = 
+        this match 
+            case BasicState( _ ) => Seq[Node]()
+            case x @ OrState( _, _ ) => x.children.filter( _.isState )
+            case x @ AndState( _, _ ) => x.children.filter( _.isState )
+            case StartMarker( _ ) => Seq[Node]()
+            case ChoicePseudoState( _ ) => Seq[Node]()
+    end childStates
 
     def show : String =
 
@@ -16,10 +58,13 @@ enum Node derives CanEqual:
             n match 
                 case BasicState( si ) => 
                     s"${indent1}Basic State\n${indent}${si.toString}\n"
-                case BranchPseudoState( si ) =>
+
+                case ChoicePseudoState( si ) =>
                     s"${indent1}Branch Pseudo-state\n${indent}${si.toString}\n"
+
                 case StartMarker( si ) =>
                     s"${indent1}Start Pseudo-state\n${indent}${si.toString}\n"
+
                 case OrState( si, children ) =>
                     val childrenString = children.map( child => show(child, indentLevel+1) )
                                                 .fold("")( (x,y) => x+y )
@@ -28,6 +73,7 @@ enum Node derives CanEqual:
                         case Some(i) => i.toString
                     ( s"${indent1}OR State\n${indent}${si.toString}\n${indent}first child is $nameOfStartState\n"
                     + childrenString )
+
                 case AndState( si, children ) =>
                     val childrenString = children.map( child => show(child, indentLevel+1) )
                                                 .fold("")( (x,y) => x+y )
@@ -40,7 +86,7 @@ enum Node derives CanEqual:
     def getName : String =
         this match
         case BasicState(si) => si.name 
-        case BranchPseudoState(si) => si.name
+        case ChoicePseudoState(si) => si.name
         case StartMarker( si ) => si.name
         case OrState( si, children ) => si.name
         case AndState( si, children ) => si.name
@@ -48,7 +94,7 @@ enum Node derives CanEqual:
 end Node
 
 
-class StateInformation( val name : String, depth : Int, index : Int ) :
+class StateInformation( val name : String, val depth : Int, val index : Int ) :
     var entryLabel : Option[String] = None
     var exitLabel : Option[String] = None
     var invLabel : Option[String] = None

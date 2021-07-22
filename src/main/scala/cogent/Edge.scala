@@ -1,15 +1,15 @@
 package cogent
 
-class Edge(
+case class Edge(
     val source : Node,
     val target : Node,
-    val eventNameOpt : Option[Trigger],
+    val triggerOpt : Option[Trigger],
     val guardOpt : Option[Guard],
     val actions : Seq[Action]
 ) :
     override def toString : String =
         s"${source.getName} ----"
-        + eventNameOpt.getOrElse("--")
+        + triggerOpt.getOrElse("--")
         + guardOpt.map( (x) => s"[$x]").getOrElse("--")
         + actions.fold("")( (x,y) => s"$x--$y")
         + s"--->${target.getName}"

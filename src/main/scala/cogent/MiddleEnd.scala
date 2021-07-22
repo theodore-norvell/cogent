@@ -21,19 +21,25 @@ class MiddleEnd(val logger : Logger) :
     import Logger.Level._
 
 
-    def processBlocks( blockList : Iterable[BlockUml] ) : Unit =
-        for block <- blockList do
-            processBlock(block)
+    def processBlocks( blockList : Iterable[BlockUml] ) : List[StateChart] =
+        val listOfOptions = for block <- blockList
+            yield processBlock(block)
+        listOfOptions.toList.flatten
 
-    def processBlock( block : BlockUml ) : Unit =
+    def processBlock( block : BlockUml ) : Option[StateChart] =
         val diagram = block.getDiagram()
+        {
+            given Logger = logger
+            blockPrinter.printBlock( block )
+        }
 
         diagram match
         case ( stateDiagram : StateDiagram ) => 
             constructStateChart( stateDiagram )
         case _ => reportWarning( "Diagram is not a state diagram" )
+            None
 
-    def constructStateChart( stateDiagram : StateDiagram ) : StateChart =
+    def constructStateChart( stateDiagram : StateDiagram ) : Option[StateChart] =
         // First: recursively walk the tree of PlantUML entities (states and state-like things) in
         // `stateDiagram`.  For each entity we create a corresponding `cogent.Node`.  `entityToNodeMutMap`
         // records a mapping from IEntity objects to `Node` objects.
@@ -67,8 +73,9 @@ class MiddleEnd(val logger : Logger) :
         val edgeSet = edgeMutSet.toSet
 
         val stateChart = StateChart( rootState, nodeSet, edgeSet, parentMap )
+        setTheStartNodes( stateChart )
         logger.log( Debug, stateChart.show )
-        return stateChart
+        return Some( stateChart )
     end constructStateChart
 
     def extractState(   depth : Int,
@@ -78,9 +85,9 @@ class MiddleEnd(val logger : Logger) :
                         sink : mutable.Map[IEntity,Node],
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit =
-        val name = (if depth == 0 then "root" else group.getCode().getName() + "_" + parent_name)
+        val name = group2Name( group, depth, parent_name )
 
-        // logger.log( Debug, s"Processing group $name")
+        logger.log( Debug, s"Processing group $name")
         val leafChildren = group.getLeafsDirect().asScala.toSeq
         val groupChildren = group.getChildren().asScala.toSeq
         val relevantLeafChildren = filterLeaves( leafChildren )
@@ -88,9 +95,9 @@ class MiddleEnd(val logger : Logger) :
         val concurrentStates = relevantGroupChildren
             .filter( (childGroup) =>
                         childGroup.getGroupType() == GroupType.CONCURRENT_STATE )
-        // logger.log( Debug, s"""... It has ${relevantLeafChildren.size} leaves
-        //             |... and ${relevantGroupChildren.size} groups 
-        //             |... of which ${concurrentStates.size} are concurrent.""".stripMargin)
+        logger.log( Debug, s"""... It has ${relevantLeafChildren.size} leaves
+                    |... and ${relevantGroupChildren.size} groups 
+                    |... of which ${concurrentStates.size} are concurrent.""".stripMargin)
 
         // No children that are states or similar.
         if( relevantLeafChildren.size == 0 && relevantGroupChildren.size == 0 ) then
@@ -99,12 +106,12 @@ class MiddleEnd(val logger : Logger) :
         // AND states have at least on child and all its children are CONCURRENT_STATEs
         else if(   relevantLeafChildren.size == 0
                 && concurrentStates.size == relevantGroupChildren.size  ) then
-            // logger.log( Debug, s"State $name identified as an AND state" )
+            logger.log( Debug, s"State $name identified as an AND state" )
             makeANDState( depth, index, group, name, sink, relevantGroupChildren, entityToNodeMap )
 
         // OR states contain no CONCURRENT_STATEs but have at least one child.
         else if( concurrentStates.size == 0 ) then
-            // logger.log( Debug, s"State $name identified as an OR state" )
+            logger.log( Debug, s"State $name identified as an OR state" )
             makeORState( depth, index, group, name, sink, relevantLeafChildren, relevantGroupChildren, entityToNodeMap )
         
         // Otherwise there are some children that are concurrent states and some that aren't.
@@ -120,13 +127,31 @@ class MiddleEnd(val logger : Logger) :
                         sink : mutable.Map[IEntity,Node],
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
-        val name = leaf.getCode().getName() + "_" + parent_name
+        val name = leaf2Name( leaf, parent_name )
         val stateInfo = StateInformation( name, depth, index )
         val node : Node =
             leaf.getLeafType() match
-                case LeafType.STATE => Node.BasicState( stateInfo )
-                case LeafType.CIRCLE_START => Node.StartMarker( stateInfo )
-                case LeafType.STATE_CHOICE => Node.BranchPseudoState( stateInfo )
+                case LeafType.STATE =>
+                    val stereotype = leaf.getStereotype()
+                    if stereotype != null then 
+                        if stereotype.toString.equals( "<<choice>>" ) then
+                            logger.debug( s"Leaf node $name identified as a CHOICE pseudostate. ")
+                            Node.ChoicePseudoState( stateInfo )
+                        else
+                            reportWarning( s"Leaf node $name has an unknown stereotype ${stereotype.toString}. It will be treated as a basic state.")
+                            logger.debug( s"Leaf node $name identified as a BASIC state. ")
+                            Node.BasicState( stateInfo )
+                        end if
+                    else
+                        logger.log(Debug, s"Leaf node $name identified as a BASIC state. ")
+                        Node.BasicState( stateInfo )
+                    end if
+                case LeafType.CIRCLE_START =>
+                    logger.log(Debug, s"Leaf node $name identified as a START marker. ")
+                    Node.StartMarker( stateInfo )
+                case LeafType.STATE_CHOICE => 
+                    logger.log(Debug, s"Leaf node $name identified as a CHOICE pseudostate. ")
+                    Node.ChoicePseudoState( stateInfo )
                 case _ => assert( false, "States should be filtered.")
         addState( leaf, node, sink, entityToNodeMap )
     end extractState
@@ -193,48 +218,52 @@ class MiddleEnd(val logger : Logger) :
 
     def filterLeaves( leaves : Seq[ILeaf] ) : Seq[ILeaf] =
         leaves.filter( (leaf) =>
+            val name = leaf.getCode().getName()
             leaf.getLeafType() match
             case LeafType.STATE =>
                 true
             case LeafType.STATE_CHOICE =>
                 true
             case LeafType.DEEP_HISTORY =>
-                reportError( "History pseudo-states are not supported yet.")
+                reportError( s"Found deep history $name. History pseudo-states are not supported yet.")
                 false 
             case LeafType.STATE_FORK_JOIN =>
-                reportError( "Fork and join pseudo-states are not supported yet.")
+                reportError( s"Found deep fork or join $name. Fork and join pseudo-states are not supported yet.")
                 false
             case LeafType.STATE_CONCURRENT =>
-                reportError( "Found a leaf marked STATE_CONCURRENT. Don't know what to do with that.")
+                reportError( "Found a leaf $name marked STATE_CONCURRENT. Don't know what to do with that.")
                 false
             case LeafType.CIRCLE_END =>
-                reportError( "Final state are not supported yet.")
+                reportError( "Found final state $name. Final state are not supported yet.")
                 false
             case LeafType.CIRCLE_START =>
                 true
             case LeafType.NOTE =>
+                reportWarning( s"Note $name ignored." )
                 false 
             case LeafType.DESCRIPTION =>
+                reportWarning( s"Description $name ignored." )
                 false 
             case _ =>
-                reportError( s"A leaf node of type ${leaf.getLeafType().toString()} was found and ignored.")
+                reportError( s"A leaf node $name of type ${leaf.getLeafType().toString()} was found and ignored.")
                 false 
         )
 
     def filterGroups( groups : Seq[IGroup] ) : Seq[IGroup] =
         groups.filter( (group) =>
+            val name = group.getCode().getName()
             group.getGroupType() match
             case GroupType.STATE => true
             case GroupType.CONCURRENT_STATE => true
             case _ =>
-                reportError( s"A group node of type ${group.getGroupType().toString()} was found and ignored.")
+                reportWarning( s"A group node named $name of type ${group.getGroupType().toString()} was found and ignored.")
                 false 
         )
 
     def computeParentMap( node : Node, parentMap : mutable.Map[Node, Node] ) : Unit =
         node match
             case Node.BasicState( si ) =>
-            case Node.BranchPseudoState( si ) => 
+            case Node.ChoicePseudoState( si ) => 
             case Node.StartMarker( si ) =>
             case Node.OrState( si, children ) =>
                 for child <- children do
@@ -256,6 +285,24 @@ class MiddleEnd(val logger : Logger) :
              .map( charSeq => charSeq.toString + "\n")
              .foldRight("")( (a,b) => a+b )
 
+    def entity2Name( entity : IEntity ) : String =
+        val code = entity.getCode()
+        if code == null then "unknown"
+        else code.getName()
+
+    def shorten( str : String ) : String =
+        if str.length() > 31 then str.substring( 0, 31 ) else str
+
+    def group2Name( group : IGroup, depth : Int, parentName : String ) : String =
+        val longName =
+            if depth == 0 then "root"
+            else entity2Name( group ) + "_" + parentName
+        shorten( longName )
+
+    def leaf2Name( leaf : ILeaf, parentName : String ) : String =
+        val longName = entity2Name(leaf) + "_" + parentName
+        shorten( longName )
+
     def extractEdgesFromLinks(  links : Seq[Link],
                                 rootState : Node,
                                 parentMap : Map[Node,Node],
@@ -265,7 +312,7 @@ class MiddleEnd(val logger : Logger) :
             val source = link.getEntity1()
             val target = link.getEntity2()
             if !(entityToNodeMap contains source) || !(entityToNodeMap contains target) then
-                reportWarning(s"Link from ${source.getCode().getName()} to ${source.getCode().getName()} ignored.")
+                reportWarning(s"Link from ${source.getCode().getName()} to ${target.getCode().getName()} ignored.")
             else 
                 val sourceNode = entityToNodeMap.apply( source )
                 val targetNode = entityToNodeMap.apply( target )
@@ -287,4 +334,36 @@ class MiddleEnd(val logger : Logger) :
             end if
         end for
     end extractEdgesFromLinks
+
+    def setTheStartNodes( stateChart : StateChart ) : Unit = {
+        val orStates = stateChart.nodes.map( node => node.asOrState ).flatten
+        for orState <- orStates do
+            val children = orState.children
+            val startNodes = children.filter( child => child.isStartNode )
+            startNodes.size match 
+                case 0 =>
+                    if orState.childStates.size == 1 then
+                        val startNode = orState.childStates.head
+                        orState.optStartingIndex = Some( startNode.stateInfo.index )
+                        reportWarning( s"Or state ${orState.getName} has no start marker. It only has 1 child state, ${startNode.getName}. That state will be the start state for the OR state.")
+                    else
+                        reportError( s"Or state ${orState.getName} has no start markers.")
+                    end if
+                case 1 =>
+                    val startNode = startNodes.head
+                    val edges = stateChart.edges.filter( e => e.source == startNode )
+                    edges.size match
+                        case 0 => reportError( s"Or state ${orState.getName} has no initial state.")
+                        case 1 =>
+                            val startNode = edges.head.target
+                            if ! startNode.isState then 
+                                reportError( s"Or state ${orState.getName} has an initial state that is not a state.")
+                            end if
+                            if stateChart.parentMap( startNode ) == orState  then
+                                orState.optStartingIndex = Some( startNode.stateInfo.index )
+                            else reportError( s"Or state ${orState.getName} has an initial state ${startNode.getName} that is not its child.")
+                            end if
+                        case _ => reportError( s"Or state ${orState.getName} has more than one initial state.")
+                case _ => reportError( s"Or state ${orState.getName} has more than one start marker.")
+    }
 end MiddleEnd
