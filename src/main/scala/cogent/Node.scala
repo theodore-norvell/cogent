@@ -49,6 +49,15 @@ enum Node derives CanEqual :
             case StartMarker( _ ) => Seq[Node]()
             case ChoicePseudoState( _ ) => Seq[Node]()
     end childStates
+    
+    def rank : Int = 
+        this match 
+            case BasicState( _ ) => 0
+            case OrState( _, _ ) => 1
+            case AndState( _, _ ) => 2
+            case StartMarker( _ ) => 3
+            case ChoicePseudoState( _ ) => 4
+    end rank
 
     def show : String =
 
@@ -91,14 +100,35 @@ enum Node derives CanEqual :
         case OrState( si, children ) => si.name
         case AndState( si, children ) => si.name
     end getName
+
+    def getLocalIndex = stateInfo.getLocalIndex
+
+    def setLocalIndex( i : Int ) : Unit =
+        stateInfo.setLocalIndex(i)
+
+    def getGlobalIndex = stateInfo.getGlobalIndex
+    
+    def setGlobalIndex( gi : Int ) : Unit = 
+        stateInfo.setGlobalIndex(gi)
+
 end Node
 
 
-class StateInformation( val name : String, val depth : Int, val index : Int ) :
+class StateInformation( val name : String, val depth : Int ) :
     var entryLabel : Option[String] = None
     var exitLabel : Option[String] = None
     var invLabel : Option[String] = None
+    var localIndex : Option[Int] = None
+    var globalIndex : Option[Int] = None
 
     override def toString : String =
-        s"name: $name depth: $depth index: $index"
+        s"name: $name depth: $depth local index: $localIndex global $globalIndex"
+
+    def getLocalIndex = localIndex.head
+
+    def setLocalIndex( i : Int ) : Unit = {localIndex = Some(i) ;}
+
+    def getGlobalIndex = globalIndex.head
+
+    def setGlobalIndex( gi : Int ) : Unit = {globalIndex = Some(gi) ;}
 end StateInformation

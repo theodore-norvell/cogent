@@ -47,7 +47,7 @@ class MiddleEnd(val logger : Logger) :
         val junk : mutable.Map[IEntity,Node] = new mutable.HashMap[IEntity,Node]()
         val entityToNodeMutMap = mutable.HashMap[IEntity, Node]()
 
-        extractState( 0,  0, "", rootGroup, junk, entityToNodeMutMap )
+        extractState( 0, "", rootGroup, junk, entityToNodeMutMap )
 
         // Second, we find a Higraph node that represents the root state.
         // This will always be an OR State.  This is a tree that includes all
@@ -73,13 +73,13 @@ class MiddleEnd(val logger : Logger) :
         val edgeSet = edgeMutSet.toSet
 
         val stateChart = StateChart( rootState, nodeSet, edgeSet, parentMap )
+        indexTheNodes( stateChart )
         setTheStartNodes( stateChart )
         logger.log( Debug, stateChart.show )
         return Some( stateChart )
     end constructStateChart
 
     def extractState(   depth : Int,
-                        index : Int,
                         parent_name : String,
                         group : IGroup,
                         sink : mutable.Map[IEntity,Node],
@@ -107,12 +107,12 @@ class MiddleEnd(val logger : Logger) :
         else if(   relevantLeafChildren.size == 0
                 && concurrentStates.size == relevantGroupChildren.size  ) then
             logger.log( Debug, s"State $name identified as an AND state" )
-            makeANDState( depth, index, group, name, sink, relevantGroupChildren, entityToNodeMap )
+            makeANDState( depth, group, name, sink, relevantGroupChildren, entityToNodeMap )
 
         // OR states contain no CONCURRENT_STATEs but have at least one child.
         else if( concurrentStates.size == 0 ) then
             logger.log( Debug, s"State $name identified as an OR state" )
-            makeORState( depth, index, group, name, sink, relevantLeafChildren, relevantGroupChildren, entityToNodeMap )
+            makeORState( depth, group, name, sink, relevantLeafChildren, relevantGroupChildren, entityToNodeMap )
         
         // Otherwise there are some children that are concurrent states and some that aren't.
         else 
@@ -121,14 +121,13 @@ class MiddleEnd(val logger : Logger) :
     end extractState
 
     def extractState(   depth : Int,
-                        index : Int,
                         parent_name : String,
                         leaf : ILeaf,
                         sink : mutable.Map[IEntity,Node],
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
         val name = leaf2Name( leaf, parent_name )
-        val stateInfo = StateInformation( name, depth, index )
+        val stateInfo = StateInformation( name, depth )
         val node : Node =
             leaf.getLeafType() match
                 case LeafType.STATE =>
@@ -157,7 +156,6 @@ class MiddleEnd(val logger : Logger) :
     end extractState
 
     def makeANDState( depth : Int,
-                    index : Int,
                     group : IGroup,
                     name : String,
                     sink : mutable.Map[IEntity,Node],
@@ -165,18 +163,15 @@ class MiddleEnd(val logger : Logger) :
                     entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit =
         val childMap = mutable.HashMap[IEntity,Node]()
-        var i = -1
         for g <- relevantGroupChildren do
-            i += 1
-            extractState( depth+1, i, name, g, childMap, entityToNodeMap )
+            extractState( depth+1, name, g, childMap, entityToNodeMap )
         val children = childMap.values.toSeq
-        val stateInfo = StateInformation( name, depth, index )
+        val stateInfo = StateInformation( name, depth )
         val andState = Node.AndState( stateInfo, children )
         addState( group, andState, sink, entityToNodeMap)
     end makeANDState
 
     def makeORState( depth : Int,
-                    index : Int,
                     group : IGroup,
                     name : String,
                     sink : mutable.Map[IEntity,Node],
@@ -185,15 +180,12 @@ class MiddleEnd(val logger : Logger) :
                     entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
         val childMap = mutable.HashMap[IEntity,Node]()
-        var i = -1 
         for g <- relevantGroupChildren do
-            i += 1
-            extractState( depth+1, i, name, g, childMap, entityToNodeMap )
+            extractState( depth+1, name, g, childMap, entityToNodeMap )
         for l <- relevantLeafChildren do 
-            i += 1
-            extractState( depth+1, i, name, l, childMap, entityToNodeMap )
+            extractState( depth+1, name, l, childMap, entityToNodeMap )
         val children = childMap.values.toSeq
-        val info =  StateInformation( name, depth, index )
+        val info =  StateInformation( name, depth )
         val orState = Node.OrState( info, children )
         addState(group, orState, sink, entityToNodeMap ) 
     end makeORState
@@ -335,6 +327,32 @@ class MiddleEnd(val logger : Logger) :
         end for
     end extractEdgesFromLinks
 
+    def indexTheNodes( stateChart : StateChart ) : Unit = 
+        var globalIndex = 0
+        val nodeList = stateChart.nodes.toSeq.sortBy( (n : Node) => n.rank )
+        for n <- nodeList do
+            n.setGlobalIndex( globalIndex )
+            globalIndex += 1
+        end for
+        indexTheNodes( stateChart.root, -1 )
+        
+        def indexTheNodes( node : Node, localIndex : Int ) : Unit =
+            node.setLocalIndex( localIndex ) 
+            node match
+                case Node.AndState( _, children ) => indexNodeList( children )
+                case Node.OrState( _, children ) => indexNodeList( children )
+                case _ => ()
+        end indexTheNodes
+        def indexNodeList( nodeList : Seq[Node] ) : Unit =
+            val sorted = nodeList.sortBy( _.rank )
+            var i = 0
+            for node <- sorted do
+                indexTheNodes( node, i)
+                i += 1
+            end for
+        end indexNodeList
+    end indexTheNodes
+
     def setTheStartNodes( stateChart : StateChart ) : Unit = {
         val orStates = stateChart.nodes.map( node => node.asOrState ).flatten
         for orState <- orStates do
@@ -344,7 +362,7 @@ class MiddleEnd(val logger : Logger) :
                 case 0 =>
                     if orState.childStates.size == 1 then
                         val startNode = orState.childStates.head
-                        orState.optStartingIndex = Some( startNode.stateInfo.index )
+                        orState.optStartingIndex = Some( startNode.getLocalIndex )
                         reportWarning( s"Or state ${orState.getName} has no start marker. It only has 1 child state, ${startNode.getName}. That state will be the start state for the OR state.")
                     else
                         reportError( s"Or state ${orState.getName} has no start markers.")
@@ -360,7 +378,7 @@ class MiddleEnd(val logger : Logger) :
                                 reportError( s"Or state ${orState.getName} has an initial state that is not a state.")
                             end if
                             if stateChart.parentMap( startNode ) == orState  then
-                                orState.optStartingIndex = Some( startNode.stateInfo.index )
+                                orState.optStartingIndex = Some( startNode.getLocalIndex )
                             else reportError( s"Or state ${orState.getName} has an initial state ${startNode.getName} that is not its child.")
                             end if
                         case _ => reportError( s"Or state ${orState.getName} has more than one initial state.")

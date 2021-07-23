@@ -41,9 +41,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
         else
             out.switchComm( s"activeState_cg_v.${state.getName}"  ) {
                 for child <- state.childStates do
-                    out.put( s"case ${child.stateInfo.index} : " )
+                    out.put( s"case ${child.getLocalIndex} : " )
                     out.block{ generateCodeForState( child ) }
-                    out.put( "break;")
+                    out.put( "break ;")
                     out.endLine
                 end for
             }
