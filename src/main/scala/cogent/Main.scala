@@ -10,7 +10,7 @@ import scala.jdk.CollectionConverters._
 import Logger.Level._
 
 @main def main : Unit =
-    val logger = new LogToStdOut( Logger.Level.Info )
+    val logger = new LogToStdOut( Logger.Level.Debug )
     val f : File = new File("foo.puml")
     if ! f.exists() then
         logger.log( Fatal, s"File ${f} does not exist.")

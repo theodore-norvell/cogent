@@ -28,6 +28,12 @@ class Outputter( val writer : PrintWriter ) :
         end if
     }
 
+    def blankLine : Unit = {
+        endLine
+        put("")
+        endLine
+    }
+
     def indent : Unit = indentation += 1
 
     def dedent : Unit = {assert( indentation > 0 ) ; indentation -= 1 ; }

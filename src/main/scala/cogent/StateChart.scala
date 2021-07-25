@@ -11,11 +11,11 @@ class StateChart(
 
     def show : String =
         val rootString = root.show
-        val nodesString = nodes.map( _.getName )
+        val nodesString = nodes.map( _.getFullName )
                                 .fold("{ ")( (x,y) => s"$x\n  $y") + " }\n"
         val edgesString = edges.map( (x) => x.toString )
                                 .fold("{ ")( (x,y) => s"$x\n  $y") + " }"
-        val parentString = parentMap.map( (k,v) => s"Parent of ${k.getName} is ${v.getName}" )
+        val parentString = parentMap.map( (k,v) => s"Parent of ${k.getFullName} is ${v.getFullName}" )
                                 .fold("")( (x,y) => x + "\n" + y )
         return s"StateChart\n$rootString\n" +
                 s"$nodesString\n$edgesString\n$parentString\n"

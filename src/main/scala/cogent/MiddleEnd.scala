@@ -75,6 +75,7 @@ class MiddleEnd(val logger : Logger) :
         val stateChart = StateChart( rootState, nodeSet, edgeSet, parentMap )
         indexTheNodes( stateChart )
         setTheStartNodes( stateChart )
+        setCNames( stateChart )
         logger.log( Debug, stateChart.show )
         return Some( stateChart )
     end constructStateChart
@@ -329,8 +330,11 @@ class MiddleEnd(val logger : Logger) :
 
     def indexTheNodes( stateChart : StateChart ) : Unit = 
         var globalIndex = 0
+        // Sort the nodes so we have OR states first, followed by other states
+        // and then other nodes.
         val nodeList = stateChart.nodes.toSeq.sortBy( (n : Node) => n.rank )
         for n <- nodeList do
+            logger.debug( s"Mapping ${n.getFullName} to $globalIndex")
             n.setGlobalIndex( globalIndex )
             globalIndex += 1
         end for
@@ -357,31 +361,60 @@ class MiddleEnd(val logger : Logger) :
         val orStates = stateChart.nodes.map( node => node.asOrState ).flatten
         for orState <- orStates do
             val children = orState.children
-            val startNodes = children.filter( child => child.isStartNode )
-            startNodes.size match 
+            val startMarkers = children.filter( child => child.isStartNode )
+            var initialState : Node = null 
+            startMarkers.size match 
                 case 0 =>
                     if orState.childStates.size == 1 then
-                        val startNode = orState.childStates.head
-                        orState.optStartingIndex = Some( startNode.getLocalIndex )
-                        reportWarning( s"Or state ${orState.getName} has no start marker. It only has 1 child state, ${startNode.getName}. That state will be the start state for the OR state.")
+                        initialState = orState.childStates.head
+                        reportWarning( s"Or state ${orState.getFullName} has no start marker. It only has 1 child state, ${initialState.getFullName}. That state will be the start state for the OR state.")
                     else
-                        reportError( s"Or state ${orState.getName} has no start markers.")
+                        reportError( s"Or state ${orState.getFullName} has no start markers.")
                     end if
                 case 1 =>
-                    val startNode = startNodes.head
-                    val edges = stateChart.edges.filter( e => e.source == startNode )
+                    val startMarker = startMarkers.head
+                    val edges = stateChart.edges.filter( e => e.source == startMarker )
                     edges.size match
-                        case 0 => reportError( s"Or state ${orState.getName} has no initial state.")
+                        case 0 => reportError( s"Or state ${orState.getFullName} has no initial state.")
                         case 1 =>
-                            val startNode = edges.head.target
-                            if ! startNode.isState then 
-                                reportError( s"Or state ${orState.getName} has an initial state that is not a state.")
+                            var candidate : Node = edges.head.target
+                            if ! candidate.isState then 
+                                reportError( s"Or state ${orState.getFullName} has an initial state that is not a state.")
+                            else if stateChart.parentMap( candidate ) != orState  then
+                                reportError( s"Or state ${orState.getFullName} has an initial state ${initialState.getFullName} that is not its child.")
+                            else
+                                initialState = candidate
                             end if
-                            if stateChart.parentMap( startNode ) == orState  then
-                                orState.optStartingIndex = Some( startNode.getLocalIndex )
-                            else reportError( s"Or state ${orState.getName} has an initial state ${startNode.getName} that is not its child.")
-                            end if
-                        case _ => reportError( s"Or state ${orState.getName} has more than one initial state.")
-                case _ => reportError( s"Or state ${orState.getName} has more than one start marker.")
+                        case _ => reportError( s"Or state ${orState.getFullName} has more than one initial state.")
+                case _ => reportError( s"Or state ${orState.getFullName} has more than one start marker.")
+            // We change its local index to 0 by swapping its index with that of the state that is currently 0
+            if initialState != null then
+                val state0 = children.filter( child => child.getLocalIndex == 0 ).head
+                assert( state0.isState)
+                val startIndex = initialState.getLocalIndex
+                state0.setLocalIndex( startIndex )
+                initialState.setLocalIndex( 0 )
+            end if
+        end for
     }
+
+
+
+    def setCNames(  stateChart : StateChart ) : Unit =
+        logger.log( Debug, "Checking for duplicate state names")
+        val cNames : mutable.Set[ String ] = new mutable.HashSet[ String ]()
+        for node <- stateChart.nodes do
+            val name = node.getFullName
+            val len = name.length
+            val shortName = if len > 10 then name else name.substring(0, len)
+            var cName = shortName
+            var counter = 0
+            while cNames contains cName do
+                cName = cName + counter
+                counter += 1
+            end while
+            node.setCName( cName )
+            cNames += name
+        end for
+    end setCNames
 end MiddleEnd

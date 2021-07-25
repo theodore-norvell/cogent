@@ -5,8 +5,7 @@ enum Node derives CanEqual :
 
     case BasicState( override val stateInfo : StateInformation )
 
-    case OrState( override val stateInfo : StateInformation, children : Seq[Node] ) 
-        var optStartingIndex : Option[Int] = None
+    case OrState( override val stateInfo : StateInformation, children : Seq[Node] )
 
     case AndState( override val stateInfo : StateInformation, children : Seq[Node] ) 
 
@@ -31,6 +30,10 @@ enum Node derives CanEqual :
             case StartMarker( _ ) => true
             case ChoicePseudoState( _ ) => false
     end isStartNode
+
+
+    
+    def isOrState : Boolean = ! asOrState.isEmpty
     
     def asOrState : Option[OrState] = 
         this match 
@@ -52,11 +55,11 @@ enum Node derives CanEqual :
     
     def rank : Int = 
         this match 
-            case BasicState( _ ) => 0
-            case OrState( _, _ ) => 1
-            case AndState( _, _ ) => 2
-            case StartMarker( _ ) => 3
-            case ChoicePseudoState( _ ) => 4
+            case OrState( _, _ ) => 0
+            case BasicState( _ ) => 1
+            case AndState( _, _ ) => 1
+            case StartMarker( _ ) => 2
+            case ChoicePseudoState( _ ) => 2
     end rank
 
     def show : String =
@@ -77,10 +80,7 @@ enum Node derives CanEqual :
                 case OrState( si, children ) =>
                     val childrenString = children.map( child => show(child, indentLevel+1) )
                                                 .fold("")( (x,y) => x+y )
-                    val nameOfStartState = optStartingIndex match
-                        case None => "not yet set"
-                        case Some(i) => i.toString
-                    ( s"${indent1}OR State\n${indent}${si.toString}\n${indent}first child is $nameOfStartState\n"
+                    ( s"${indent1}OR State\n${indent}${si.toString}\n"
                     + childrenString )
 
                 case AndState( si, children ) =>
@@ -92,14 +92,12 @@ enum Node derives CanEqual :
         show( this, 0 ) 
     end show
 
-    def getName : String =
-        this match
-        case BasicState(si) => si.name 
-        case ChoicePseudoState(si) => si.name
-        case StartMarker( si ) => si.name
-        case OrState( si, children ) => si.name
-        case AndState( si, children ) => si.name
-    end getName
+    def getFullName : String = stateInfo.fullName
+
+    def getCName = stateInfo.getCName
+    
+    def setCName( name : String ) : Unit = 
+        stateInfo.setCName(name)
 
     def getLocalIndex = stateInfo.getLocalIndex
 
@@ -114,15 +112,20 @@ enum Node derives CanEqual :
 end Node
 
 
-class StateInformation( val name : String, val depth : Int ) :
+class StateInformation( val fullName : String, val depth : Int ) :
     var entryLabel : Option[String] = None
     var exitLabel : Option[String] = None
     var invLabel : Option[String] = None
     var localIndex : Option[Int] = None
     var globalIndex : Option[Int] = None
+    var cName : Option[String] = None
 
     override def toString : String =
-        s"name: $name depth: $depth local index: $localIndex global $globalIndex"
+        s"name: $fullName depth: $depth local index: $localIndex global $globalIndex"
+
+    def getCName = cName.head
+
+    def setCName( name : String ) : Unit = {cName = Some(name) ;}
 
     def getLocalIndex = localIndex.head
 

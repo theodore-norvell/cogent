@@ -6,9 +6,7 @@ class Checker( val logger : Logger ) :
     import Logger.Level._
 
     def check( stateChart : StateChart ) : Unit =
-        checkNoDuplicatedStateNames( stateChart )
         checkValidCNamesForStates( stateChart )
-        checkAllOrStatesHaveAStartingState( stateChart )
         checkNoLabelsOnStartEdges( stateChart )
         checkNoEdgesToStart( stateChart )
         checkAllEdgesReachable( stateChart )
@@ -16,41 +14,17 @@ class Checker( val logger : Logger ) :
         checkOnlyEdgesOutOfStatesHaveTriggers( stateChart )
     end check
 
-    def checkNoDuplicatedStateNames(  stateChart : StateChart ) : Unit =
-        logger.log( Debug, "Checking for duplicate state names")
-        val names : mutable.Set[ String ] = new mutable.HashSet[ String ]()
-        for node <- stateChart.nodes do
-            val name = node.getName 
-            if names contains name then
-                logger.log( Fatal, s"Two or more states have the name $name.")
-            else
-                names += name
-    end checkNoDuplicatedStateNames
-
     def checkValidCNamesForStates(  stateChart : StateChart ) : Unit = {
         logger.log( Debug, "Checking for valid C names for states")
         val regEx = """[a-zA-Z_][a-zA-Z_0-9]*""".r
         for node <- stateChart.nodes do
             if node.isState then 
-                val name = node.getName 
+                val name = node.getCName 
                 if ! regEx.matches(name) then
                     logger.log( Fatal, s"State named $name is not a valid C identifier.")
                 end if
             end if
         end for
-    }
-
-    def checkAllOrStatesHaveAStartingState(  stateChart : StateChart ) : Unit = {
-        // If this fails, there is a problem with the middle end, as it should have
-        // already done all the checking.
-        for node <- stateChart.nodes do
-            node match {
-                case Node.OrState( _, _) => 
-                    if  node.optStartingIndex.isEmpty then 
-                        logger.log( Fatal, s"Or state ${node.getName} has no start state" )
-                    end if
-                case _ => ()
-            }
     }
 
     def checkNoLabelsOnStartEdges(  stateChart : StateChart ) : Unit = {

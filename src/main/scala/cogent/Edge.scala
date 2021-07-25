@@ -8,17 +8,22 @@ case class Edge(
     val actions : Seq[Action]
 ) :
     override def toString : String =
-        s"${source.getName} ----"
+        s"${source.getFullName} ----"
         + triggerOpt.getOrElse("--")
         + guardOpt.map( (x) => s"[$x]").getOrElse("--")
         + actions.fold("")( (x,y) => s"$x--$y")
-        + s"--->${target.getName}"
+        + s"--->${target.getFullName}"
 end Edge
 
 
 enum Trigger :
     case AfterTrigger( durationInMilliseconds : Double )
     case NamedTrigger( name : String )
+
+    def asNamedTrigger : Option[NamedTrigger] =
+        this match
+            case AfterTrigger( _ ) => None
+            case x@NamedTrigger( _ ) => Some(x)
 end Trigger
 
 enum Guard :
