@@ -12,6 +12,13 @@ class Checker( val logger : Logger ) :
         checkAllEdgesReachable( stateChart )
         checkAllEdgesOutOfStatesHaveTriggers( stateChart )
         checkOnlyEdgesOutOfStatesHaveTriggers( stateChart )
+        // Other things to check:
+        // (a) Define a bundle to be a set of all transitions out
+        //     of a state that have the same trigger or a set of
+        //     all transitions out of a branch node.
+        //     (i) Each bundle with size greater than one should have
+        //         a guard on every edge.
+        //     (ii) At most one edge in each bundle is labelled with "else".
     end check
 
     def checkValidCNamesForStates(  stateChart : StateChart ) : Unit = {
@@ -28,7 +35,7 @@ class Checker( val logger : Logger ) :
     }
 
     def checkNoLabelsOnStartEdges(  stateChart : StateChart ) : Unit = {
-        val edgesFromStart = stateChart.edges.filter( e => e.source.isStartNode )
+        val edgesFromStart = stateChart.edges.filter( e => e.source.isStartMarker )
         for e <- edgesFromStart do
             e match {
                 case Edge(_, _, None, None, List()) => ()
@@ -37,7 +44,7 @@ class Checker( val logger : Logger ) :
     }
 
     def checkNoEdgesToStart(  stateChart : StateChart ) : Unit = {
-        val edgesToStart = stateChart.edges.filter( e => e.target.isStartNode )
+        val edgesToStart = stateChart.edges.filter( e => e.target.isStartMarker )
         for e <- edgesToStart do
             logger.log( Fatal, s"Edge $e goes to a start pseudo-state")
     }
@@ -47,7 +54,7 @@ class Checker( val logger : Logger ) :
         // A path is sequence of one of more edges that
         // starts at a state and ends at a state.
         val edges = edgesOnPaths( stateChart )
-        val edgesFromStart = stateChart.edges.filter( e => e.source.isStartNode )
+        val edgesFromStart = stateChart.edges.filter( e => e.source.isStartMarker )
         val edgesNotOnPaths = stateChart.edges -- edges -- edgesFromStart
         for e <- edgesNotOnPaths do
             logger.log( Warning, s"Edge $e is not reachable from any state")
@@ -86,7 +93,7 @@ class Checker( val logger : Logger ) :
         val edgesFromStates = stateChart.edges.filter( e => e.source.isState )
         for e <- edgesFromStates do
             if e.triggerOpt.isEmpty then
-                logger.warning( "Edge $e has no trigger. The trigger is assumed to be 'after(0s)'." )
+                logger.fatal( "Edge $e has no trigger. Completion events are not supported." )
     }
 
     def checkOnlyEdgesOutOfStatesHaveTriggers(  stateChart : StateChart ) : Unit = {

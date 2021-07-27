@@ -20,6 +20,7 @@ class MiddleEnd(val logger : Logger) :
 
     import Logger.Level._
 
+    enum ParentKind{ case AND; case OR; case NONE; }
 
     def processBlocks( blockList : Iterable[BlockUml] ) : List[StateChart] =
         val listOfOptions = for block <- blockList
@@ -47,7 +48,7 @@ class MiddleEnd(val logger : Logger) :
         val junk : mutable.Map[IEntity,Node] = new mutable.HashMap[IEntity,Node]()
         val entityToNodeMutMap = mutable.HashMap[IEntity, Node]()
 
-        extractState( 0, "", rootGroup, junk, entityToNodeMutMap )
+        extractState( 0, "", ParentKind.NONE, -1, rootGroup, junk, entityToNodeMutMap )
 
         // Second, we find a Higraph node that represents the root state.
         // This will always be an OR State.  This is a tree that includes all
@@ -72,21 +73,24 @@ class MiddleEnd(val logger : Logger) :
 
         val edgeSet = edgeMutSet.toSet
 
-        val stateChart = StateChart( rootState, nodeSet, edgeSet, parentMap )
+        var stateChart = StateChart( rootState, nodeSet, edgeSet, parentMap )
         indexTheNodes( stateChart )
         setTheStartNodes( stateChart )
         setCNames( stateChart )
+        stateChart = addMissingTriggers( stateChart )
         logger.log( Debug, stateChart.show )
         return Some( stateChart )
     end constructStateChart
 
     def extractState(   depth : Int,
-                        parent_name : String,
+                        parentName : String,
+                        parentKind : ParentKind,
+                        index : Int,
                         group : IGroup,
                         sink : mutable.Map[IEntity,Node],
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit =
-        val name = group2Name( group, depth, parent_name )
+        val name = group2Name( group, parentName, parentKind, index )
 
         logger.log( Debug, s"Processing group $name")
         val leafChildren = group.getLeafsDirect().asScala.toSeq
@@ -118,16 +122,18 @@ class MiddleEnd(val logger : Logger) :
         // Otherwise there are some children that are concurrent states and some that aren't.
         else 
             reportError( s"Node $name has ${concurrentStates.size} regions "
-                    + s"... but it also has other children. This seems wrong.")
+                    + s"but it also has other children. This seems wrong.")
     end extractState
 
     def extractState(   depth : Int,
-                        parent_name : String,
+                        parentName : String,
+                        parentKind : ParentKind,
+                        index : Int,
                         leaf : ILeaf,
                         sink : mutable.Map[IEntity,Node],
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
-        val name = leaf2Name( leaf, parent_name )
+        val name = leaf2Name( leaf, parentName )
         val stateInfo = StateInformation( name, depth )
         val node : Node =
             leaf.getLeafType() match
@@ -164,8 +170,11 @@ class MiddleEnd(val logger : Logger) :
                     entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit =
         val childMap = mutable.HashMap[IEntity,Node]()
+        var childIndex = 0 
         for g <- relevantGroupChildren do
-            extractState( depth+1, name, g, childMap, entityToNodeMap )
+            extractState( depth+1, name, ParentKind.AND, childIndex, g, childMap, entityToNodeMap )
+            childIndex += 1
+        end for
         val children = childMap.values.toSeq
         val stateInfo = StateInformation( name, depth )
         val andState = Node.AndState( stateInfo, children )
@@ -181,10 +190,13 @@ class MiddleEnd(val logger : Logger) :
                     entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
         val childMap = mutable.HashMap[IEntity,Node]()
+        var childIndex = 0
         for g <- relevantGroupChildren do
-            extractState( depth+1, name, g, childMap, entityToNodeMap )
-        for l <- relevantLeafChildren do 
-            extractState( depth+1, name, l, childMap, entityToNodeMap )
+            extractState( depth+1, name, ParentKind.OR, childIndex, g, childMap, entityToNodeMap )
+            childIndex += 1
+        for leaf <- relevantLeafChildren do 
+            extractState( depth+1, name, ParentKind.OR, childIndex, leaf, childMap, entityToNodeMap )
+            childIndex += 1
         val children = childMap.values.toSeq
         val info =  StateInformation( name, depth )
         val orState = Node.OrState( info, children )
@@ -283,18 +295,13 @@ class MiddleEnd(val logger : Logger) :
         if code == null then "unknown"
         else code.getName()
 
-    def shorten( str : String ) : String =
-        if str.length() > 31 then str.substring( 0, 31 ) else str
-
-    def group2Name( group : IGroup, depth : Int, parentName : String ) : String =
-        val longName =
-            if depth == 0 then "root"
-            else entity2Name( group ) + "_" + parentName
-        shorten( longName )
+    def group2Name( group : IGroup, parentName : String, parentKind : ParentKind, index : Int ) : String =
+        if parentKind==ParentKind.NONE then "root"
+        else if parentKind==ParentKind.AND then s"${parentName}_region_${index}"
+        else entity2Name( group )
 
     def leaf2Name( leaf : ILeaf, parentName : String ) : String =
-        val longName = entity2Name(leaf) + "_" + parentName
-        shorten( longName )
+        entity2Name(leaf)
 
     def extractEdgesFromLinks(  links : Seq[Link],
                                 rootState : Node,
@@ -361,13 +368,15 @@ class MiddleEnd(val logger : Logger) :
         val orStates = stateChart.nodes.map( node => node.asOrState ).flatten
         for orState <- orStates do
             val children = orState.children
-            val startMarkers = children.filter( child => child.isStartNode )
+            val startMarkers = children.filter( child => child.isStartMarker )
             var initialState : Node = null 
             startMarkers.size match 
                 case 0 =>
                     if orState.childStates.size == 1 then
                         initialState = orState.childStates.head
-                        reportWarning( s"Or state ${orState.getFullName} has no start marker. It only has 1 child state, ${initialState.getFullName}. That state will be the start state for the OR state.")
+                        logger.log( Info, s"Or state ${orState.getFullName} has no start marker." +
+                                            s" It only has 1 child state, ${initialState.getFullName}. " + 
+                                            "That state will be the start state for the OR state.")
                     else
                         reportError( s"Or state ${orState.getFullName} has no start markers.")
                     end if
@@ -379,7 +388,7 @@ class MiddleEnd(val logger : Logger) :
                         case 1 =>
                             var candidate : Node = edges.head.target
                             if ! candidate.isState then 
-                                reportError( s"Or state ${orState.getFullName} has an initial state that is not a state.")
+                                reportError( s"Or state ${orState.getFullName} has an initial vertex that is not a state.")
                             else if stateChart.parentMap( candidate ) != orState  then
                                 reportError( s"Or state ${orState.getFullName} has an initial state ${initialState.getFullName} that is not its child.")
                             else
@@ -417,4 +426,28 @@ class MiddleEnd(val logger : Logger) :
             cNames += name
         end for
     end setCNames
+
+
+    def addMissingTriggers(  stateChart : StateChart ) : StateChart =
+        logger.log( Debug, "AddingMissingTriggers")
+        val newEdges = mutable.Set[Edge]()
+        for edge <- stateChart.edges do
+            edge match 
+                case Edge( source, target, triggerOpt, guardOpt, actions ) =>
+                    if triggerOpt.isEmpty && source.isState then
+                        val newEdge = Edge( source, target, Some(Trigger.AfterTrigger(0)), guardOpt, actions )
+                        newEdges += newEdge
+                        if source.isBasicState then
+                            logger.info( s"An edge exiting state ${source.getFullName} has no trigger. " +
+                                            "The trigger will be assumed to be 'after(0s)'.")
+                        else
+                            reportError( s"An edge exiting compound state ${source.getFullName} has no trigger. " +
+                                            "This is not allowed because completion events are not yet supported." )
+                        end if
+                    else
+                        newEdges += edge
+                    end if
+        end for
+        StateChart( stateChart.root, stateChart.nodes, newEdges.toSet, stateChart.parentMap )
+    end addMissingTriggers
 end MiddleEnd

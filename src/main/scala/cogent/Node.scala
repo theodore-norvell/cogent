@@ -22,14 +22,23 @@ enum Node derives CanEqual :
             case ChoicePseudoState( _ ) => false
     end isState
     
-    def isStartNode : Boolean = 
+    def isStartMarker : Boolean = 
         this match 
             case BasicState( _ ) => false
             case OrState( _, _ ) => false
             case AndState( _, _ ) => false
             case StartMarker( _ ) => true
             case ChoicePseudoState( _ ) => false
-    end isStartNode
+    end isStartMarker
+    
+    def isBasicState : Boolean = 
+        this match 
+            case BasicState( _ ) => true
+            case OrState( _, _ ) => false
+            case AndState( _, _ ) => false
+            case StartMarker( _ ) => false
+            case ChoicePseudoState( _ ) => false
+    end isBasicState
 
 
     

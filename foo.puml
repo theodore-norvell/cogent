@@ -4,7 +4,11 @@
         [*] -> C
         state C
         state D
-        C -> D: a / x
+        C -> D: a [g] / w
+        C -> D: a [h] / x
+        D -> C : a [g] / w
+        D -> C : a [h] / x
+        D -> C : a [else] / y
         --
         note "E" as E
         [*] -> F
@@ -17,7 +21,10 @@
         F --> E : XYZ
         --
         [*] -> W
-        state W : label
+        state W {
+            state X
+            X -> X
+        }
     }
     state A
 @enduml
