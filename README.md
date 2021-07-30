@@ -1,10 +1,12 @@
-# cogent-Project
+# Cogent Project
 
 Generate Code from PlantUML statecharts.
 
-## Example and requirements
+Author: Theodore Norvell (theo@mun.ca)
 
-Input is a plant UML spec such as
+## Example and prerequisites
+
+The input is a plant UML spec such as
 
 ```
 @startuml
@@ -20,7 +22,7 @@ Input is a plant UML spec such as
 @enduml
 ```
 
-From a PlantUML spec, Cogent generates a controller in C that looks something like this:
+From a PlantUML spec, Cogent generates a controller in C that looks like this:
 
 ```C
 bool dispatchEvent( const event_t *pev ){
@@ -30,7 +32,7 @@ bool dispatchEvent( const event_t *pev ){
 
 As events happen they should be fed into the controller and it will react by changing its own state and taking actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
 
-The `dispatchEvent` subroutine has many requirements which need to be supplied. You need to define
+The `dispatchEvent` subroutine has many prerequisites which need to be supplied. You need to define
 
 * The `event_t` type.
 * A function (or a function-like macro) `eventClassOf(event_p)` which produces an member of an enum type.
@@ -61,21 +63,26 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
 ```
 
 * Some functions similar to the FreeRTOS functions `xTaskGetTickCount`, `vTaskDelay`, and `pdMS_TO_TICKS` and a type similar to FreeRTOS's `TickType_t`. If using FreeRTOS, just include the appropriate header files.
+* A macro or function "void assertThat( bool )".  This should do nothing if the argument is true. What it does if the argument is false is up to you
+* A macro or function "void assertUnreachable()".  What this does is up to you.
 
 ## TICK events
 
 TICK events are used to trigger transitions labelled "after( D )" where D is a duration in seconds or milliseconds.  My advice is after every event that makes the controller return true, feed the controller a sequence of TICK events until it returns false.
 
 ```C
+     /* Do this shortly after an event happens. */
+
      bool handled = dispatchEvent( &event ) ;
      while( handled ) {
          handled = dispatchEvent( &tick ) ;
      }
 ```
 
-In any you should periodically send the controller a sequence of tick events fairly frequently:
+And you should periodically send the controller a sequence of tick events fairly frequently:
 
 ```C
+     /* Do this fairly frequently. */
      bool handled = dispatchEvent( &tick ) ;
      while( handled ) {
          handled = dispatchEvent( &tick ) ;
@@ -86,7 +93,7 @@ In any you should periodically send the controller a sequence of tick events fai
 
 ### States and pseudostates
 
-States and choice pseudostates (TODO check the latter) should have names that are proper C identifiers and should be less or equal to 20 characters.
+States and choice pseudostates (TODO: this may change. Revisit this statement later)should have names that are proper C identifiers and should be less or equal to 20 characters.
 
 States can be
 
@@ -167,11 +174,11 @@ For example in the diagram above:
 
 In the previous diagram, W, W2, W3, and the whole diagram are OR states.  The single region inside of W, for example, is not considered to be a state.
 
-It might be logical to consider W to be an AND state with one child (its region) which is an OR state. That way all OR states would correspond to a region. But this is not the way Cogent sees it.
+It might be logical to consider W to be an AND state with one child (its region) which is an OR state. That way all OR states would correspond to a region. But this is not the way Cogent sees it.  (This might change if we every support internal actions)
 
 #### Start pseudostates
 
-Each OR state should have one (and only one) start pseudostates and it should have one and only one unlabelled transition to a sibling state which is not labelled.
+Each OR state should have one (and only one) start pseudostate and it should have one and only one transition out of it. This transition must go to a sibling state which is not labelled.
 
 However, an OR state with only one child state does not need a start pseudo state.
 
@@ -185,7 +192,7 @@ Notes are ignored.
 
 #### Final states
 
-Final states are not supported. Completion events are no supported.
+Final states are not supported. Completion events are not supported.
 
 #### Forks, Joins, and other pseudostates
 
@@ -197,7 +204,7 @@ Entry and exit actions for states are not yet supported.
 
 Do actions are not supported.
 
-Internal actions are not supported.
+Internal actions are not supported (yet).
 
 ### State semantics
 
@@ -212,8 +219,7 @@ When the machine is at rest. We have the following invariants:
 * OR1 When an OR state is active, none of its children except its current child are active.
 * OR2 When an OR state is not active, none of its children are active.
 * AND0 For any AND state, if it is active, all of its children will be active.
-* AND1 For any AND state, either all of its children are active, or none of its children are active.
-* AND2 For any AND state, if it is not active, none of its children will be active.
+* AND1 For any AND state, if it is not active, none of its children will be active.
 
 Invariants OR0 and AND0 could be untrue when the machine is not at rest .  Consider this example
 
@@ -266,12 +272,12 @@ Each transition is labelled with
 
 Triggers can be:
 
-* Just a name. These correspond to event classes.
-* after( D ) where D is a duration. Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)". The maximum duration depends on your implementation of the time functions and `TickType_t` and is not checked by cogent.
+* Named triggers: Just a name. These correspond to event classes.
+* After triggers: after( D ) where D is a duration. Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)". The maximum duration depends on your implementation of the time functions and `TickType_t` and is not checked by cogent.
 
 ### Guards
 
-Guards are boolean expressions enclosed in brackets. For examples:
+Guards are either the special guard "[else]" or boolean expressions enclosed in brackets. For example:
 
 * "[ A ]"
 * "[ A and not B or C implies D]"
@@ -286,7 +292,23 @@ This will be true if state S is active at the time.
 
 The boolean operators follow the usual rules of precedence and are right associative.
 
-There is a special guard "[else]" that can not appear as an operand. 
+### Action sequences.
+
+A sequence of one or more actions can follow a slash "/". Each action can be followed by an semicolon, but this is optional.  Examples
+
+* "" an empty sequence
+* "/ a" or "/ a;" a sequence of 1 action
+* "/ a b c", "/ a; b; c", "/ a; b; c;" etc. A sequence of three actions
+
+### Actions
+
+Each action is either
+
+* A C identifier, such as "f". This is translated into a function call "f( event_p );".
+* Any code within braces.  This is copied verbatim into the controller.
+
+
+### Restrictions on transitions.
 
 Transitions come in three flavours
 
@@ -296,6 +318,112 @@ Transitions come in three flavours
 
 Strawberry transitions should not be labelled.
 
-Vanilla transitions should have a trigger.
+Vanilla transitions should have a trigger.  (If the source state is a basic state, Cogent will rewrite a missing trigger as "after(0s)".)
 
 Chocolate transitions should not have a trigger.
+
+Chocolate transitions may not form a cycle.
+
+For state any state, if there is more than one transition out of it with the same named trigger then of these transitions:
+
+* At most one may be guarded with an else.
+* None may be unguarded.
+
+The same restrictions apply to the set of all transitions that leave a given choice pseudo-state.
+
+### Using guards appropriately
+
+A vanilla transition is enabled if its source state is active
+* It has no guard.
+* It has a guard that is true.
+* It has an else guard and all the competing guards are false.
+
+When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example if there are guards A, B. The generated code might look like this
+
+```C
+   if( A(event_p) ) { do transition guarded by A }
+   else if( B(event_p) ) { do transition guarded by B }
+   else { do nothing }
+```
+
+or like this:
+
+```C
+   if( B(event_p) ) { do transition guarded by B }
+   else if( A(event_p) ) { do transition guarded by A }
+   else { do nothing }
+```
+
+For the set of all edges leaving a given state that are all labelled with the same named trigger:
+
+* It is good practice to ensure that at most one guard will be true.
+
+Once a vanilla transition is traversed, the machine is committed, there is no turning back. If it reaches a choice state where no guard is true, the dispatcher will do goodness knows what.
+
+E.g. if the two transitions out of a choice pseudostate are guarded by A and B the generated code could be
+
+```C
+   if( A(event_p) ) { do transition guarded by A }
+   else if( B(event_p) ) { do transition guarded by B }
+   else { assertUnreachable() ; }
+```
+
+or
+
+```C
+   if( B(event_p) ) { do transition guarded by B }
+   else if( A(event_p) ) { do transition guarded by A }
+   else { assertUnreachable() ; }
+```
+
+Note that if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.
+
+For the set of all transitions leaving a given choice pseudo state:
+
+* It is necessary that you ensure that at least one guard will be true, or that you have an else-guarded transition.
+* It is good practice to ensure that at most one guard will be true.
+
+### Pre-emption
+
+When there are enabled transitions out of more than one state that could all fire.  Transitions that leave child (or grandchild, etc) states have priority over transitions out or parent (or grandparent, etc) states.  For example:
+
+```
+@startuml
+
+
+state A {
+    state B
+    state C
+    [*] -> B
+    B -> C : a [P] / x
+    --
+    state D
+    state E
+    [*] -> D
+    D -> E : a [Q] / y
+}
+state F 
+[*] -> A
+A -> F : a / z ;
+
+@enduml
+```
+
+Suppose the active states are A, B, and D. 
+
+* If not P and not Q, then the transition from A to F will fire.
+* If P and not Q, then the transition from B to C will fire. The transition from D to E is blocked because Q is false and the transition from A to F is blocked by pre-emption.
+* If not P and Q, the situation is similar. Only the transition from D to E fires.
+* If P and Q, then both the transition from B to C and the transition from D to E will fire and the transition from A to F will be blocked by pre-emption.
+
+When two vanilla transitions fire in concurrently, as in the previous example, they actually go sequentially on the same thread, so there is no need to worry about mutual exclusion and race conditions between x and y. The generated code will follow this algorithm:
+
+1. if P : exit B; do x; enter C
+1. if Q : exit D; do y; enter E
+1. if neither of the above happened: exit B; exit A's upper region; exit D; exit A's lower region; exit A; do z; enter F
+
+or the same with the first two lines swapped.  Likewise the exits on the last line could happen in an alternative order
+
+* exit D; exit A's lower region; exit B; exit A's upper region; exit A;
+
+As you can see from algorithm of the generated code, the x action should not effect the truth of Q and the action y should not affect the truth of P otherwise things get very hard to analyse.  Likewise you have to be careful with "in" guards. For example if P were "in D" and Q is true, that would be ugly since whether that "in D" is true or not depends on whether the other transition is considered first.
