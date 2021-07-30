@@ -43,6 +43,7 @@ class Checker( val logger : Logger ) :
                 end if
             end if
         end for
+        // TODO check for C keywords.  And do the same for actions and guards.
     }
 
     def checkNoLabelsOnStartEdges(  stateChart : StateChart ) : Unit = {
