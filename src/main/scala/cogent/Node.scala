@@ -31,6 +31,15 @@ enum Node derives CanEqual :
             case ChoicePseudoState( _ ) => false
     end isStartMarker
     
+    def isChoicePseudostate : Boolean = 
+        this match 
+            case BasicState( _ ) => false
+            case OrState( _, _ ) => false
+            case AndState( _, _ ) => false
+            case StartMarker( _ ) => false
+            case ChoicePseudoState( _ ) => true
+    end isChoicePseudostate
+    
     def isBasicState : Boolean = 
         this match 
             case BasicState( _ ) => true
@@ -39,8 +48,6 @@ enum Node derives CanEqual :
             case StartMarker( _ ) => false
             case ChoicePseudoState( _ ) => false
     end isBasicState
-
-
     
     def isOrState : Boolean = ! asOrState.isEmpty
     
@@ -62,12 +69,13 @@ enum Node derives CanEqual :
             case ChoicePseudoState( _ ) => Seq[Node]()
     end childStates
     
+    // Rank is used for sorting both for global indexes and for local indexes.
     def rank : Int = 
         this match 
             case OrState( _, _ ) => 0
             case BasicState( _ ) => 1
             case AndState( _, _ ) => 1
-            case StartMarker( _ ) => 2
+            case StartMarker( _ ) => 3
             case ChoicePseudoState( _ ) => 2
     end rank
 
@@ -81,7 +89,7 @@ enum Node derives CanEqual :
                     s"${indent1}Basic State\n${indent}${si.toString}\n"
 
                 case ChoicePseudoState( si ) =>
-                    s"${indent1}Branch Pseudo-state\n${indent}${si.toString}\n"
+                    s"${indent1}Choice Pseudo-state\n${indent}${si.toString}\n"
 
                 case StartMarker( si ) =>
                     s"${indent1}Start Pseudo-state\n${indent}${si.toString}\n"
@@ -117,6 +125,8 @@ enum Node derives CanEqual :
     
     def setGlobalIndex( gi : Int ) : Unit = 
         stateInfo.setGlobalIndex(gi)
+
+    def getDepth : Int = stateInfo.depth
 
 end Node
 

@@ -6,7 +6,8 @@ class Checker( val logger : Logger ) :
     import Logger.Level._
 
     def check( stateChart : StateChart ) : Unit =
-        checkValidCNamesForStates( stateChart )
+        childrenOfANDsAreORs( stateChart )
+        checkValidCNamesForStatesAndChoices( stateChart )
         checkNoLabelsOnStartEdges( stateChart )
         checkNoEdgesToStart( stateChart )
         checkAllEdgesReachable( stateChart )
@@ -21,14 +22,24 @@ class Checker( val logger : Logger ) :
         //     (ii) At most one edge in each bundle is labelled with "else".
     end check
 
-    def checkValidCNamesForStates(  stateChart : StateChart ) : Unit = {
+    def childrenOfANDsAreORs(  stateChart : StateChart ) : Unit = {
+        for n <- stateChart.nodes do
+            n match
+                case Node.AndState( _, children ) =>
+                    for child <- children do
+                        if ! child.isOrState then
+                            logger.fatal( s"Vertex ${child.getFullName} is child of AND state ${n.getFullName}, but is not an OR state.")
+                case _ => {}
+    }
+
+    def checkValidCNamesForStatesAndChoices(  stateChart : StateChart ) : Unit = {
         logger.log( Debug, "Checking for valid C names for states")
         val regEx = """[a-zA-Z_][a-zA-Z_0-9]*""".r
         for node <- stateChart.nodes do
-            if node.isState then 
+            if node.isState || node.isChoicePseudostate then 
                 val name = node.getCName 
                 if ! regEx.matches(name) then
-                    logger.log( Fatal, s"State named $name is not a valid C identifier.")
+                    logger.log( Fatal, s"State or choice named $name is not a valid C identifier.")
                 end if
             end if
         end for

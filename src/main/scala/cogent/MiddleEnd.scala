@@ -354,6 +354,7 @@ class MiddleEnd(val logger : Logger) :
                 case Node.OrState( _, children ) => indexNodeList( children )
                 case _ => ()
         end indexTheNodes
+
         def indexNodeList( nodeList : Seq[Node] ) : Unit =
             val sorted = nodeList.sortBy( _.rank )
             var i = 0
@@ -410,16 +411,16 @@ class MiddleEnd(val logger : Logger) :
 
 
     def setCNames(  stateChart : StateChart ) : Unit =
-        logger.log( Debug, "Checking for duplicate state names")
+        logger.log( Debug, "Ensure no duplicate state names")
         val cNames : mutable.Set[ String ] = new mutable.HashSet[ String ]()
         for node <- stateChart.nodes do
             val name = node.getFullName
             val len = name.length
-            val shortName = if len > 10 then name else name.substring(0, len)
+            val shortName = (if len > 10 then name else name.substring(0, len))
             var cName = shortName
             var counter = 0
             while cNames contains cName do
-                cName = cName + counter
+                cName = shortName + counter
                 counter += 1
             end while
             node.setCName( cName )

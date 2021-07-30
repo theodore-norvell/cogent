@@ -22,8 +22,22 @@
         --
         [*] -> W
         state W {
-            state X
-            X -> X
+            [*] -> W1
+            state W1
+            state WC <<choice>>
+            state W2 {
+                [*] -> W21
+                state W21
+                state W22
+                W22 -> WC : a / p
+            }
+            state W3 {
+                [*] -> W31
+                state W31
+                state W32
+            }
+            WC -> W1 : [A] / q
+            WC -> W32 : [B] / r
         }
     }
     state A
