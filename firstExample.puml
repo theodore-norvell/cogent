@@ -1,0 +1,11 @@
+@startuml
+    state IDLE 
+    state RUNNING
+    state C <<choice>>
+    [*] -> IDLE
+    IDLE -> C : go
+    C -> RUNNING : [READY] / start
+    C -> IDLE : [else]
+    RUNNING -> IDLE : kill / stop
+    RUNNING --> IDLE : after(60s) / stop
+@enduml

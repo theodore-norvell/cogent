@@ -8,7 +8,9 @@ Author: Theodore Norvell (theo@mun.ca)
 
 The input is a plant UML spec such as
 
-```
+![First Example](diagrams/firstExample.png)
+
+```PLANTUML
 @startuml
     state IDLE 
     state RUNNING
@@ -43,7 +45,7 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
     typedef enum EventClass_e {go, kill, TICK} ;
 ```
 
-* For each action, there needs to be a function of type `void (const event_p *)` with the same name as the action. For the example above we would need to supply functions
+* For each action, there needs to be a function of type `void (const event_p *)` with the same name as the action. For the example above, we would need to supply functions
 
 ```C
     void start(const event_p *) {
@@ -93,19 +95,29 @@ And you should periodically send the controller a sequence of tick events fairly
 
 ### States and pseudostates
 
-States and choice pseudostates (TODO: this may change. Revisit this statement later)should have names that are proper C identifiers and should be less or equal to 20 characters.
+States and choice pseudostates (TODO: this may change; revisit this statement later.)should have names that are proper C identifiers and should be less or equal to 20 characters.
 
-States can be
+But, you can define a state like this
 
-#### Basic states
+```
+state "Configuring\nmode" as Configuring
+```
+
+so it will appear in renderings however you want it.
+
+States can be simple states or composite states. Composite states can have one region or multiple regions.
+
+#### Simple states
 
 Like in the first example:
 
-#### Compound states
+#### Composite states
 
 I.e. states with children.
 
-```
+![composite states](diagrams/compositeStates.png)
+
+```PLANTUML
 @startuml
 state W {
             [*] -> W1
@@ -128,33 +140,45 @@ state W {
 @enduml
 ```
 
-#### Concurrency states
+#### Composite states with multiple regions
 
-I.e. States with two or more regions that operate concurrently.
+Composite states may have multiple regions; this allows for a form of concurrency. Each region operates as a separate pseudo-thread.
 
-```
+![Multiple Regions]( diagrams/multipleRegions.png )
+
+```PLANTUML
 @startuml
-    state A {
-        note "B" as B
-        [*] -> C
-        state C
-        state D
-        C -> D: a [g] / w
-        C -> D: a [h] / x
-        D -> C : a [g] / w
-        D -> C : a [h] / x
-        D -> C : a [else] / y
+    state Controller {
+        note "Mouse state tracking" as A
+        state Up
+        state Down
+        [*] -> Up
+        Up --> Down : mouseDown
+        Down --> Up : mouseUp
         --
-        note "E" as E
-        [*] -> F
-        state F
-        state G
-        state H <<choice>>
-        F -> H: a / y
-        H -> F: [ok] 
-        H -> G: [else]
-        F --> E : XYZ
-    state A
+        note "ClickDetection" as B
+        state Idle
+        state Wait0
+        state Wait1
+        state Wait2
+        [*] -> Idle 
+        Idle -> Wait0 : mouseDown
+        Wait0 -> Wait1 : mouseUp /\n queueMouseClick
+        Wait0 --> Idle : after(100ms)
+        Wait1 -> Wait2 : mouseDown
+        Wait1 --> Idle : after(100ms)
+        Wait2 -> Idle : mouseUp /\n queueMouseDoubleClick
+        Wait2 --> Idle : after(100ms)
+        --
+        note "Drag and Drop controller" as D
+        state Selecting 
+        state Dragging
+        [*] -> Selecting 
+        Selecting -> Selecting : mouseClick / \n selectItem
+        Selecting --> Dragging : mouseMove [in Down and \n selectionNotEmpty] / \n grabSelection
+        Dragging --> Selecting : mouseUp / \n dropSelection
+        Dragging --> Dragging : mouseMove / \n moveSelection
+    }
 @enduml
 ```
 
@@ -162,41 +186,60 @@ Cogent will make up names for the regions, like `A_region_0` and `A_region_1`. C
 
 #### How Cogent sees states
 
-Cogent calls regions, OR states. It also calls compound states that don't have multiple regions OR states.  And it considers the whole diagram an OR state, called the root state.  Compound states with multiple regions it calls AND states.
+Cogent has it's own way of looking at states, which differs a bit from the UML standard. To better understand its error messages, it helps to understand this.
+
+* Basic states: The same as UML's simple states.
+* AND states: Composite states with multiple regions are called AND states.
+* OR states: The entire diagram is an OR state.  Composite states with only one region are OR states.  Regions that have at least one sibling region are also OR states.
 
 For example in the diagram above:
 
 * The diagram is an OR state, the root state.
-* A is an AND state and is the only child of the root state
-* A's two regions are OR states and are its children.
-* C and D are basic states and are the children of one region.
-* F and G are basic states and are the children of the other region.
+* `Controller` is an AND state and is the only child of the root state
+* `Controller`'s three regions are each OR states and are children of the AND state.
+* All others are simple states which are children of the OR states representing the regions.
 
 In the previous diagram, W, W2, W3, and the whole diagram are OR states.  The single region inside of W, for example, is not considered to be a state.
 
-It might be logical to consider W to be an AND state with one child (its region) which is an OR state. That way all OR states would correspond to a region. But this is not the way Cogent sees it.  (This might change if we every support internal actions)
+It might be logical to consider W, W2, and W3 to be AND states, each with one child (its region), which is an OR state. That way all OR states would correspond to a region -- if we consider the whole diagram to be a region. But this is not the way Cogent sees it.  (This might change if we every support internal actions.)
 
-#### Start pseudostates
+#### Initial pseudostates
 
-Each OR state should have one (and only one) start pseudostate and it should have one and only one transition out of it. This transition must go to a sibling state which is not labelled.
+Each OR state should have one (and only one) initial pseudostate and it should have one and only one transition out of it. This transition must go to a sibling state and should not have an label.
 
-However, an OR state with only one child state does not need a start pseudo state.
+As an exception, an OR state with only one child state does not need a initial pseudo state.
 
 #### Choice pseudostates
 
-As shown in the examples, choice pseudostates can be used. 
-
-#### Notes
-
-Notes are ignored.
+As shown in the examples, choice pseudostates can be used.
 
 #### Final states
 
 Final states are not supported. Completion events are not supported.
 
+#### Submachines
+
+Submachines play the same rule in statecharts as subroutines play in programming.
+
+Submachines are not supported yet.
+
+Supporting them in the future is fairly important since: PlantUML can have trouble dealing with large complex diagrams. And, even if PlantUML did do a good job of rendering large complex diagrams, large complex diagrams can be difficult to understand and review.
+
+#### Other pseudostates
+
+* History pseudostates are not supported yet.
+* Junction pseudostates would be easy to support, but I don't know how to make them in PlantUML. You can use choice pseudostates with just one exiting edge, instead.
+* Entry and exit pseudostates are not supported yet.
+* Terminate pseudostates are not supported.
+* Fork and join pseudostates are not supported.
+
 #### Forks, Joins, and other pseudostates
 
-Are not supported.
+Other pseudostates not supported. 
+
+#### Notes
+
+Notes are ignored.
 
 ### State Actions
 
@@ -204,7 +247,7 @@ Entry and exit actions for states are not yet supported.
 
 Do actions are not supported.
 
-Internal actions are not supported (yet).
+Internal actions are not supported yet.
 
 ### State semantics
 
@@ -223,7 +266,9 @@ When the machine is at rest. We have the following invariants:
 
 Invariants OR0 and AND0 could be untrue when the machine is not at rest .  Consider this example
 
-```
+![composite states](diagrams/compositeStates.png)
+
+```PLANTUML
 @startuml
 state W {
             [*] -> W1
@@ -264,9 +309,21 @@ Similarly at the point when the exit or entry action of an AND state is executed
 
 Each transition is labelled with
 
-* A trigger. (Optional)
-* A guard (Optional)
-* A sequence of actions (possibly empty).
+* A trigger (optional)
+* A guard (optional)
+* A sequence of actions (possibly empty)
+
+in that order.
+
+Here are some examples
+
+```
+    A -> B : a [ p ] / x; y; z
+    A -> B : after(20ms) / \n {reset(counter24);}
+    A -> B : [not in X and ready or {justdoit}] 
+    A -> B : [else] / go
+```
+Newlines ("\n") are treated as spaces.
 
 #### Triggers
 
@@ -275,7 +332,7 @@ Triggers can be:
 * Named triggers: Just a name. These correspond to event classes.
 * After triggers: after( D ) where D is a duration. Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)". The maximum duration depends on your implementation of the time functions and `TickType_t` and is not checked by cogent.
 
-### Guards
+#### Guards
 
 Guards are either the special guard "[else]" or boolean expressions enclosed in brackets. For example:
 
@@ -292,15 +349,15 @@ This will be true if state S is active at the time.
 
 The boolean operators follow the usual rules of precedence and are right associative.
 
-### Action sequences.
+#### Action sequences
 
 A sequence of one or more actions can follow a slash "/". Each action can be followed by an semicolon, but this is optional.  Examples
 
-* "" an empty sequence
+* "" an empty sequence is indicated by the absence of a slash
 * "/ a" or "/ a;" a sequence of 1 action
 * "/ a b c", "/ a; b; c", "/ a; b; c;" etc. A sequence of three actions
 
-### Actions
+#### Actions
 
 Each action is either
 
@@ -312,13 +369,13 @@ Each action is either
 
 Transitions come in three flavours
 
-* Strawberry: From a start pseudo state to a state with the same parent. These transitions must not be labelled.
-* Vanilla: From a state (Basic or compound) to another state or to a choice pseudostate.
+* Strawberry: From a initial pseudo state to a state with the same parent. These transitions must not be labelled.
+* Vanilla: From a state (simple or composite) to another state or to a choice pseudostate.
 * Chocolate: From a choice psuedostate to another choice psuedostate.
 
 Strawberry transitions should not be labelled.
 
-Vanilla transitions should have a trigger.  (If the source state is a basic state, Cogent will rewrite a missing trigger as "after(0s)".)
+Vanilla transitions should have a trigger.  (If the source state is a simple state, Cogent will rewrite a missing trigger as "after(0s)".)
 
 Chocolate transitions should not have a trigger.
 
@@ -387,7 +444,9 @@ For the set of all transitions leaving a given choice pseudo state:
 
 When there are enabled transitions out of more than one state that could all fire.  Transitions that leave child (or grandchild, etc) states have priority over transitions out or parent (or grandparent, etc) states.  For example:
 
-```
+![Pre-emption diagram](diagrams/preemtion.png)
+
+```PLANTUML
 @startuml
 
 
@@ -427,3 +486,58 @@ or the same with the first two lines swapped.  Likewise the exits on the last li
 * exit D; exit A's lower region; exit B; exit A's upper region; exit A;
 
 As you can see from algorithm of the generated code, the x action should not effect the truth of Q and the action y should not affect the truth of P otherwise things get very hard to analyse.  Likewise you have to be careful with "in" guards. For example if P were "in D" and Q is true, that would be ugly since whether that "in D" is true or not depends on whether the other transition is considered first.
+
+### Local vs external transitions
+
+UML considers transitions to be either **external** or **local**. Local transitions do not exit the state they are in, whereas external transitions do.
+
+Consider these two diagrams. The only difference between the input files is that the second file uses In the first, PlantUML renders the transition from M to O as exiting M before re-entering M and ending at O.  This is the correct notation for an external transition. In this case the x action should be executed.
+
+![External transition diagram](diagrams/external.png)
+
+```plantuml
+@startuml
+state M {
+      M : exit / y
+      [*] -> N
+      N -> O 
+      M -> O : a
+}
+@enduml
+```
+
+For the second diagram, PlantUML renders the transition from M to O as a local transition.  The x action should not be executed.
+
+![External transition diagram](diagrams/local.png)
+
+```plantuml
+@startuml
+state M {
+      M : exit / x
+      [*] -> N
+      N -> O 
+      M --> O : a
+}
+@enduml
+```
+
+Cogent considers all vanilla and chocolate transitions to be external.
+
+### PlantUML limitation on edges
+
+PlantUML currently rejects diagrams with any transitions that enter or leave a region when that region has sibling regions.
+
+For example, the edge from T to R leaves its region.
+
+```Plantuml
+@startuml
+state R {
+      [*] -> S
+      --
+      [*] -> T
+      T -> R
+}
+@enduml
+```
+
+Cogent doesn't have any problem with these transitions in principle. But, since it uses PlantUML for parsing, it can't handle them.

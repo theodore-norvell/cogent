@@ -104,6 +104,10 @@ class MiddleEnd(val logger : Logger) :
                     |... and ${relevantGroupChildren.size} groups 
                     |... of which ${concurrentStates.size} are concurrent.""".stripMargin)
 
+        val stereotype = try group.getStereotype() catch (e) => null
+        if stereotype != null then 
+                logger.info( s"Composite node $name has an unknown stereotype ${stereotype.toString}. The stereotype will be ignored.")
+        end if
         // No children that are states or similar.
         if( relevantLeafChildren.size == 0 && relevantGroupChildren.size == 0 ) then
             reportError( s"State $name is a group but has no children that are states" )
@@ -143,8 +147,12 @@ class MiddleEnd(val logger : Logger) :
                         if stereotype.toString.equals( "<<choice>>" ) then
                             logger.debug( s"Leaf node $name identified as a CHOICE pseudostate. ")
                             Node.ChoicePseudoState( stateInfo )
+                        else if unsupportedStereotypes contains stereotype.toString then
+                            reportError( s"Leaf node $name has an unsupported stereotype ${stereotype.toString}.")
+                            logger.debug( s"Leaf node $name identified as a BASIC state. ")
+                            Node.BasicState( stateInfo )
                         else
-                            reportWarning( s"Leaf node $name has an unknown stereotype ${stereotype.toString}. It will be treated as a basic state.")
+                            logger.info( s"Leaf node $name has an unknown stereotype ${stereotype.toString}. It will be treated as a basic state.")
                             logger.debug( s"Leaf node $name identified as a BASIC state. ")
                             Node.BasicState( stateInfo )
                         end if
@@ -236,10 +244,10 @@ class MiddleEnd(val logger : Logger) :
                 reportError( s"Found deep fork or join $name. Fork and join pseudo-states are not supported yet.")
                 false
             case LeafType.STATE_CONCURRENT =>
-                reportError( "Found a leaf $name marked STATE_CONCURRENT. Don't know what to do with that.")
+                reportError( s"Found a leaf $name marked STATE_CONCURRENT. Don't know what to do with that.")
                 false
             case LeafType.CIRCLE_END =>
-                reportError( "Found final state $name. Final state are not supported yet.")
+                reportError( s"Found final state $name. Final state are not supported yet.")
                 false
             case LeafType.CIRCLE_START =>
                 true
@@ -391,7 +399,7 @@ class MiddleEnd(val logger : Logger) :
                             if ! candidate.isState then 
                                 reportError( s"Or state ${orState.getFullName} has an initial vertex that is not a state.")
                             else if stateChart.parentMap( candidate ) != orState  then
-                                reportError( s"Or state ${orState.getFullName} has an initial state ${initialState.getFullName} that is not its child.")
+                                reportError( s"Or state ${orState.getFullName} has an initial state ${candidate.getFullName} that is not its child.")
                             else
                                 initialState = candidate
                             end if
@@ -451,4 +459,10 @@ class MiddleEnd(val logger : Logger) :
         end for
         StateChart( stateChart.root, stateChart.nodes, newEdges.toSet, stateChart.parentMap )
     end addMissingTriggers
+
+    private val unsupportedStereotypes = Set(
+        "<<entryPoint>>", "<<exitPoint>>", 
+        "<<fork>>", "<<join>>",
+        "<<inputPin>>", "<<outputPin>>",
+        "<<expansionInput>>", "<<expansionOutput>>" )
 end MiddleEnd
