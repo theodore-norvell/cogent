@@ -1,6 +1,12 @@
 package cogent
 class Backend( val logger : Logger, val out : COutputter ) :
 
+    private val isInArrayName = "isIn_a"
+    private val currentChildArrayName = "currentChild_a"
+    private val handledArrayName = "handled_a"
+    private val eventPointerName = "event_p"
+    private val statusVarName = "status"
+
     def generateCCode( stateChart : StateChart ) : Unit = {
         val root = stateChart.root
 
@@ -9,19 +15,19 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.blankLine
         out.put( "// This array maps the global index of each OR state to the local index of its currently active state" )
         out.endLine
-        out.put( "static localIndex_t activeChild_a[ OR_STATE_COUNT ] ;" )
+        out.put( s"static localIndex_t ${currentChildArrayName}[ OR_STATE_COUNT ] ;" )
         out.endLine
-        out.put( "static bool_t isIn_a[ STATE_COUNT ] ;" )
+        out.put( s"static bool_t $isInArrayName[ STATE_COUNT ] ;" )
         out.blankLine
         
-        out.put( "bool dispatchEvent( event_t *pev )" )
+        out.put( s"bool dispatchEvent( event_t *${eventPointerName} ) " )
        
         out.block{
-            out.put( "bool_t handled_a[ STATE_COUNT ] = {false};" )
+            out.put( s"bool_t ${handledArrayName}[ STATE_COUNT ] = {false};" )
             out.endLine
             generateCodeForState( root, stateChart ) 
             val rootStateName = stateChart.root.getCName
-            out.put( s"return handled_a[ ${globalMacro(root)} ];" )
+            out.put( s"return ${handledArrayName}[ ${globalMacro(root)} ];" )
         }
 
         // TODO Initialize the activeState_cg_v
@@ -107,14 +113,14 @@ class Backend( val logger : Logger, val out : COutputter ) :
             else if state.childStates.size == 1 then
                 val child = state.childStates.head
                 generateCodeForState( child, stateChart )
-                out.put( s"handled_a[ $globalIndexMacro ] = handled_a[ ${globalMacro(child)} ] ;")
+                out.put( s"${handledArrayName}[ $globalIndexMacro ] = ${handledArrayName}[ ${globalMacro(child)} ] ;")
                 out.endLine
             else /* state.childStates.size > 1 */
-                out.switchComm(true, s"activeChild_a[ $globalIndexMacro]"  ) {
+                out.switchComm(true, s"${currentChildArrayName}[ $globalIndexMacro]"  ) {
                     for child <- state.childStates do
                         out.caseComm( localMacro(child)  ) {
                             generateCodeForState( child, stateChart )
-                            out.put( s"handled_a[ $globalIndexMacro ] = handled_a[ ${globalMacro(child)} ] ;")
+                            out.put( s"${handledArrayName}[ $globalIndexMacro ] = ${handledArrayName}[ ${globalMacro(child)} ] ;")
                             out.endLine
                         }
                         out.endLine
@@ -122,7 +128,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 }
             end if
             if needCodeForEvents( state, stateChart ) then
-                out.ifComm( s"! handled_a[ ${globalMacro(state)} ]" ){
+                out.ifComm( s"! ${handledArrayName}[ ${globalMacro(state)} ]" ){
                     generateEventCodeForState( state, stateChart )
                 }
                 out.endLine
@@ -142,15 +148,15 @@ class Backend( val logger : Logger, val out : COutputter ) :
             var first = true
             for child <- state.childStates do
                 generateCodeForState( child, stateChart )
-                val str = if first then "" else s" handled_a[ $globalIndexMacro ] ||"
-                out.put( s"handled_a[ $globalIndexMacro ] =$str handled_a[ ${globalMacro(child)} ] ;")
+                val str = if first then "" else s" ${handledArrayName}[ $globalIndexMacro ] ||"
+                out.put( s"${handledArrayName}[ $globalIndexMacro ] =$str ${handledArrayName}[ ${globalMacro(child)} ] ;")
                 out.endLine
                 first = false 
             end for
             
             
             if needCodeForEvents( state, stateChart ) then
-                out.ifComm( s"! handled_a[ ${globalMacro(state)} ]" ){
+                out.ifComm( s"! ${handledArrayName}[ ${globalMacro(state)} ]" ){
                     generateEventCodeForState( state, stateChart )
                 }
             else
@@ -170,7 +176,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         // Now all named triggers
         val namedTriggers = edges.map(e => e.triggerOpt.flatMap( _.asNamedTrigger )).flatten
         if namedTriggers.size > 0 then
-            out.switchComm( false, "eventClassOf(event_p)" ) {
+            out.switchComm( false, s"eventClassOf(${eventPointerName})" ) {
                 for Trigger.NamedTrigger( name ) <- namedTriggers do
                     generateCaseForEvent( name, state, stateChart )
                 end for
@@ -191,11 +197,11 @@ class Backend( val logger : Logger, val out : COutputter ) :
                             }).getOrElse( false ) ) ;
         
         out.caseComm( name ){
-            generateIfsForEdges( name, state, edges, true, stateChart ) ;
+            generateIfsForEdges( name, state, edges, stateChart ) ;
         }
     }
 
-    def generateIfsForEdges( name : String, node : Node, edges : Set[Edge], nodeIsState : Boolean, stateChart : StateChart) : Unit = {
+    def generateIfsForEdges( name : String, node : Node, edges : Set[Edge], stateChart : StateChart) : Unit = {
         assert( node.isState || node.isChoicePseudostate )
         val elseGuardedEdges = edges.filter( e => e.guardOpt.map( g => g match{
                                                     case Guard.ElseGuard() => true
@@ -214,7 +220,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 // ... and it's the only edge
                 assert( edges.size == 1 )
                 val edge = unguardedEdges.head
-                out.put( s"handled_a[${globalMacro(node)}] = true ; " ) 
+                out.put( s"${handledArrayName}[${globalMacro(node)}] = true ; " ) 
                 out.endLine
                 generateTransition( edge, stateChart )
         else 
@@ -229,9 +235,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
             // For each edge that is not guarded by an else, output "if(...) {...} else "
             for edge <- nonElseGuardedEdges do
                 val guard = edge.guardOpt.head
-                out.ifComm{ generateGuardExpression( guard ) }{
-                    if nodeIsState then
-                        out.put( s"handled_a[${globalMacro(node)}] = true ; " ) 
+                out.ifComm{ generateGuardExpression( guard, stateChart ) }{
+                    if node.isState then
+                        out.put( s"${handledArrayName}[${globalMacro(node)}] = true ; " ) 
                         out.endLine
                     end if
                     generateTransition( edge, stateChart )
@@ -240,7 +246,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             end for
             if elseGuardedEdges.size == 1 then
                 out.block{ generateTransition( elseGuardedEdges.head, stateChart ) }
-            else if nodeIsState then
+            else if node.isState then
                 out.block{
                     out.comment( "No transition." ) ; out.endLine
                 }
@@ -261,6 +267,8 @@ class Backend( val logger : Logger, val out : COutputter ) :
         assert( target.isState || target.isChoicePseudostate )
         val actions = edge.actions
         out.comment( s"Transition from ${source.getCName} to ${target.getCName}." ) ; out.endLine
+        if( source.isState )
+            out.put( s"status_t ${statusVarName} = OK_STATUS ;") ; out.endLine
 
         val leastCommonOr = stateChart.leastCommonOrOf( source, target )
 
@@ -311,16 +319,90 @@ class Backend( val logger : Logger, val out : COutputter ) :
             // been checked for loops that do not go through a state
             // and so this recursive call should terminate.
             val edges = stateChart.edges.filter( e => e.source == target )
-            generateIfsForEdges( "none", target, edges, false, stateChart )
+            generateIfsForEdges( "none", target, edges, stateChart )
     }
 
-    def generateGuardExpression( guard : Guard ) : Unit = {
-        out.comment( s"TODO code for guard $guard." )
+    def generateGuardExpression( guard : Guard, stateChart : StateChart ) : Unit = {
+        out.endLine
+        out.indent
+        gge( guard )
+        out.dedent
+        out.endLine
+
+        def gge( guard : Guard ) : Unit = {
+            guard match
+                case Guard.ElseGuard() => assert(false, "Else where else should not be")
+                case Guard.OKGuard() => out.put( s"OK( $statusVarName )" )
+                case Guard.InGuard( name : String ) => 
+                    // TODO. Bug! What if the name was changed!
+                    out.put( s"${isInArrayName}[ ${globalMacro(name, stateChart)} ]" )
+                case Guard.NamedGuard( name : String ) =>
+                    out.put( s"$name( ${eventPointerName}, ${statusVarName} )" ) 
+                case Guard.RawGuard( rawCCode : String ) =>
+                    out.put (s"( $rawCCode )")
+                case Guard.NotGuard( operand : Guard ) =>
+                    out.put( "! ") ; gge( operand )
+                case Guard.AndGuard( left : Guard, right : Guard ) =>
+                    out.endLine
+                    out.put("(" ) 
+                    out.endLine
+                    out.indent
+                    gge( left )
+                    out.dedent
+                    out.endLine
+                    out.put( "&&" )
+                    out.endLine
+                    out.indent
+                    gge( right )
+                    out.dedent
+                    out.endLine
+                    out.put( ")" )
+                    out.endLine
+                case Guard.OrGuard( left: Guard, right : Guard ) =>
+                    out.endLine
+                    out.put("(" ) 
+                    out.endLine
+                    out.indent
+                    gge( left )
+                    out.dedent
+                    out.endLine
+                    out.put( "||" )
+                    out.endLine
+                    out.indent
+                    gge( right )
+                    out.dedent
+                    out.endLine
+                    out.put( ")" )
+                    out.endLine
+                case Guard.ImpliesGuard( left : Guard, right : Guard ) =>
+                    out.endLine
+                    out.put("( !" ) 
+                    out.endLine
+                    out.indent
+                    gge( left )
+                    out.dedent
+                    out.endLine
+                    out.put( "||" )
+                    out.endLine
+                    out.indent
+                    gge( right )
+                    out.dedent
+                    out.endLine
+                    out.put( ")" )
+                    out.endLine
+
+        }
     }
 
     def generateActionCode( action : Action ) : Unit = {
-        out.comment( s"TODO code for action $action." )
-        out.endLine
+        out.comment( s"Code for action $action." ) ; out.endLine
+        action match 
+            case Action.NamedAction( name : String ) =>
+                out.put( s"${statusVarName} = ${name}( ${eventPointerName}, $statusVarName ) ;" )
+                out.endLine
+            case Action.RawAction( rawCCode : String ) =>
+                out.put( s"{ ${rawCCode} ; }" )
+                out.endLine
     }
 
     def needCodeForEvents( state : Node, stateChart : StateChart ) : Boolean = { 
@@ -331,6 +413,11 @@ class Backend( val logger : Logger, val out : COutputter ) :
     def globalMacro( node : Node ) : String = {
         assert( node.isState )
         ("G_INDEX_" + node.getCName )
+    }
+
+    def globalMacro( name : String, stateChart : StateChart ) : String = {
+        assert( stateChart.nodes.exists( n => n.getCName == name && n.isState ) )
+        ("G_INDEX_" + name )
     }
 
     def localMacro( node : Node ) : String = {

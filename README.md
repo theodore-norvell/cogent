@@ -10,7 +10,7 @@ The input is a plant UML spec such as
 
 ![First Example](diagrams/firstExample.png)
 
-```PLANTUML
+```
 @startuml
     state IDLE 
     state RUNNING
@@ -44,22 +44,31 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
 ```C
     typedef enum EventClass_e {go, kill, TICK} ;
 ```
-
-* For each action, there needs to be a function of type `void (const event_p *)` with the same name as the action. For the example above, we would need to supply functions
+* A type named `status_t` along with a constant (or macro) `OK_STATUS` and a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
 
 ```C
-    void start(const event_p *) {
+    typedef status_t int16_t ;
+    #define OK_STATUS ((int16_t)0)
+    #define OK( s ) ( (s)==OK_STATUS )
+```
+
+* For each action, there needs to be a function of type `status_t (const event_p *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is none. For the example above, we would need to supply functions
+
+```C
+    status_t start(const event_p *, status_t status) {
         ...
     }
-    void stop(const event_p *) {
+    status_t stop(const event_p *, status_t status) {
         ...
     }
 ```
 
+In this particular example, the input status in both cases will be `OK_STATUS`, since `start` and `stop` are the first actions on their compound transitions. In both cases, the output status is ignored since `start` and `stop` are also the last actions on their transitions, and there are no subsequent guards that depend on the status.
+
 * For each guard, there needs to be a function of type `bool (const event_p *)`.  For the example above, we would need
 
 ```C
-    bool READY(const event_p *) {
+    bool READY(const event_p *, status_t) {
         ...
     }
 ```
@@ -74,10 +83,11 @@ TICK events are used to trigger transitions labelled "after( D )" where D is a d
 
 ```C
      /* Do this shortly after an event happens. */
-
      bool handled = dispatchEvent( &event ) ;
-     while( handled ) {
+     int count = 0 ;
+     while( handled && count < MAX ) {
          handled = dispatchEvent( &tick ) ;
+         count += 1 ;
      }
 ```
 
@@ -86,10 +96,13 @@ And you should periodically send the controller a sequence of tick events fairly
 ```C
      /* Do this fairly frequently. */
      bool handled = dispatchEvent( &tick ) ;
-     while( handled ) {
+     int count = 0 ;
+     while( handled && count < MAX ) {
          handled = dispatchEvent( &tick ) ;
+         count += 1 ;
      }
 ```
+
 
 ## Details
 
@@ -117,7 +130,7 @@ I.e. states with children.
 
 ![composite states](diagrams/compositeStates.png)
 
-```PLANTUML
+```
 @startuml
 state W {
             [*] -> W1
@@ -146,7 +159,7 @@ Composite states may have multiple regions; this allows for a form of concurrenc
 
 ![Multiple Regions]( diagrams/multipleRegions.png )
 
-```PLANTUML
+```
 @startuml
     state Controller {
         note "Mouse state tracking" as A
@@ -268,7 +281,7 @@ Invariants OR0 and AND0 could be untrue when the machine is not at rest .  Consi
 
 ![composite states](diagrams/compositeStates.png)
 
-```PLANTUML
+```
 @startuml
 state W {
             [*] -> W1
@@ -342,12 +355,14 @@ Guards are either the special guard "[else]" or boolean expressions enclosed in 
 
 Basic guards are 
 
-* A C identifier. This is translated to a function call.
+* A C identifier. This is translated to a function call, e.g. "A" translates to "A( eventP, status )"
 * Any text between braces. E.g. "{x>10}". These are not translated at all, but output as-is with the braces replaced by parentheses.
-* "in S" where S is the name of a state.
-This will be true if state S is active at the time.
+* "in S" where S is the name of a state.  This will be true if state S is active at the time.
+* "OK" this will translate to a `OK( status )`. Note that this is pointless on transitions that leave states, since the `status` variable is initialized to `OK_STATUS`. It only makes sense on transitions that leave choice nodes.
 
-The boolean operators follow the usual rules of precedence and are right associative.
+The boolean operators follow the usual rules of precedence (not, then and, then or, then implies) and are right associative.
+
+All keywords (else, not, and, or, implies, OK, in) are case sensitive.
 
 #### Action sequences
 
@@ -361,8 +376,8 @@ A sequence of one or more actions can follow a slash "/". Each action can be fol
 
 Each action is either
 
-* A C identifier, such as "f". This is translated into a function call "f( event_p );".
-* Any code within braces.  This is copied verbatim into the controller.
+* A C identifier, such as "f". This is translated into a function call "status = f( event_p, status );".
+* Any code within braces.  This is copied verbatim into the controller with an extra semicolon tacked on the end. E.g. you could write "{status = 42}" and the generated code will be "{ status = 42 ; }".
 
 
 ### Restrictions on transitions.
@@ -398,16 +413,18 @@ A vanilla transition is enabled if its source state is active
 When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example if there are guards A, B. The generated code might look like this
 
 ```C
-   if( A(event_p) ) { do transition guarded by A }
-   else if( B(event_p) ) { do transition guarded by B }
+   status_t status = OK_STATUS ;
+   if( A(event_p, status) ) { do transition guarded by A }
+   else if( B(event_p, status) ) { do transition guarded by B }
    else { do nothing }
 ```
 
 or like this:
 
 ```C
-   if( B(event_p) ) { do transition guarded by B }
-   else if( A(event_p) ) { do transition guarded by A }
+   status_t status = OK_STATUS ;
+   if( B(event_p, status) ) { do transition guarded by B }
+   else if( A(event_p, status) ) { do transition guarded by A }
    else { do nothing }
 ```
 
@@ -415,21 +432,21 @@ For the set of all edges leaving a given state that are all labelled with the sa
 
 * It is good practice to ensure that at most one guard will be true.
 
-Once a vanilla transition is traversed, the machine is committed, there is no turning back. If it reaches a choice state where no guard is true, the dispatcher will do goodness knows what.
+Once a vanilla transition is traversed, the machine is committed, there is no turning back. If it reaches a choice state where no guard is true, the dispatcher will call `assertUnreachable()`.
 
 E.g. if the two transitions out of a choice pseudostate are guarded by A and B the generated code could be
 
 ```C
-   if( A(event_p) ) { do transition guarded by A }
-   else if( B(event_p) ) { do transition guarded by B }
+   if( A(event_p, status) ) { do transition guarded by A }
+   else if( B(event_p, status) ) { do transition guarded by B }
    else { assertUnreachable() ; }
 ```
 
 or
 
 ```C
-   if( B(event_p) ) { do transition guarded by B }
-   else if( A(event_p) ) { do transition guarded by A }
+   if( B(event_p, status) ) { do transition guarded by B }
+   else if( A(event_p, status) ) { do transition guarded by A }
    else { assertUnreachable() ; }
 ```
 
@@ -440,13 +457,52 @@ For the set of all transitions leaving a given choice pseudo state:
 * It is necessary that you ensure that at least one guard will be true, or that you have an else-guarded transition.
 * It is good practice to ensure that at most one guard will be true.
 
+#### Using status appropriately
+
+Just before any vanilla transition, a status variable is initialized to `OK_STATUS`.  The status is then threaded through the actions and can be accessed in the guards.  E.g. consider this set of transitions
+
+![Pre-emption diagram](diagrams/statusExample.png)
+
+```
+@startuml
+state A
+state B <<choice>>
+state C
+state D
+A -> B : a / f; g
+B -> C : [OK] / h
+B -> A : [{status==1}] / m
+B --> D : [else] / n
+@enduml
+```
+
+Here the input status of `f` will be `OK_STATUS` and the output status of `f` will be the input status of `g`. Then the output status of `g` is used to make the decision and then it is input to `h`, `m`, or `n`.  The C code might look like this
+
+```C
+
+status_t status = OK_STATUS ;
+...some code to exit A...
+status = f( eventP, status ) ;
+status = g( eventP, status ) ;
+if( OK( status ) ) {
+    status = h( eventP, status ) ;
+    ...some code to enter C...
+} else if( (status==1) ) {
+    status = m( eventP, status ) ;
+    ...some code to enter A...
+} else {
+    status = n( eventP, status ) ;
+    ...some code to enter D...
+}
+```
+
 ### Pre-emption
 
 When there are enabled transitions out of more than one state that could all fire.  Transitions that leave child (or grandchild, etc) states have priority over transitions out or parent (or grandparent, etc) states.  For example:
 
 ![Pre-emption diagram](diagrams/preemtion.png)
 
-```PLANTUML
+```
 @startuml
 
 
@@ -491,11 +547,11 @@ As you can see from algorithm of the generated code, the x action should not eff
 
 UML considers transitions to be either **external** or **local**. Local transitions do not exit the state they are in, whereas external transitions do.
 
-Consider these two diagrams. The only difference between the input files is that the second file uses In the first, PlantUML renders the transition from M to O as exiting M before re-entering M and ending at O.  This is the correct notation for an external transition. In this case the x action should be executed.
+Consider these two diagrams. The only difference between the input files is that the second file uses In the first, PlantUML renders the transition from M to O as exiting M before re-entering M and ending at O.  This is the correct notation for an external transition. In this case the y action should be executed.
 
 ![External transition diagram](diagrams/external.png)
 
-```plantuml
+```
 @startuml
 state M {
       M : exit / y
@@ -510,7 +566,7 @@ For the second diagram, PlantUML renders the transition from M to O as a local t
 
 ![External transition diagram](diagrams/local.png)
 
-```plantuml
+```
 @startuml
 state M {
       M : exit / x
@@ -529,7 +585,7 @@ PlantUML currently rejects diagrams with any transitions that enter or leave a r
 
 For example, the edge from T to R leaves its region.
 
-```Plantuml
+```
 @startuml
 state R {
       [*] -> S

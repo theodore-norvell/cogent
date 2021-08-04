@@ -75,6 +75,7 @@ object parsers extends RegexParsers:
         (
             keyword("not") ~> primitiveGuard ^^ (g => Guard.NotGuard(g))
         |   literal("!") ~> primitiveGuard ^^ (g => Guard.NotGuard(g))
+        |   keyword("OK") ^^ ( name => Guard.OKGuard( ) )
         |   keyword("in") ~> ident  ^^ ( name => Guard.InGuard( name ) )
         |   ident ^^ ( name => Guard.NamedGuard( name ) )
         |   literal("{") ~> commit(cCode <~ literal("}")) ^^ (str => Guard.RawGuard(str))

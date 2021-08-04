@@ -28,6 +28,7 @@ end Trigger
 
 enum Guard :
     case ElseGuard() // ElseGuards must not be operands of other guards.
+    case OKGuard( )
     case InGuard( name : String )
     case NamedGuard( name : String )
     case RawGuard( rawCCode : String )

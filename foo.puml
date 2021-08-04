@@ -4,7 +4,7 @@
         [*] -> C
         state C
         state D
-        C -> D: a [g] / w
+        C -> D: a \n [g and {status==12} and not in F] \n / w
         C -> D: a [h] / x
         D -> C : a [g] / w
         D -> C : a [h] / x
@@ -36,7 +36,7 @@
                 state W31
                 state W32
             }
-            WC -> W1 : [A] / q
+            WC -> W1 : [A || OK] / q
             WC -> W32 : [B] / r
         }
     }
