@@ -103,6 +103,32 @@ And you should periodically send the controller a sequence of tick events fairly
      }
 ```
 
+If there is a queue of events, then the following code could be executed periodically
+
+```C
+    event_t event ;
+    bool timedOut ;
+    bool success = takeFromQueue( & event ) ;
+    if( success ) {
+        do {
+            bool handled = dispatchEvent( event ) ;
+            int count = 0 ;
+            while( handled && count < MAX ) {
+                handled = dispatchEvent( &tick ) ;
+                count += 1 ;
+            }
+            success = takeFromQueue( & event ) ;
+        } while( success ) ;
+    } else {
+        bool handled = dispatchEvent( &tick ) ;
+        int count = 0 ;
+        while( handled && count < MAX ) {
+            handled = dispatchEvent( &tick ) ;
+            count += 1 ;
+        }
+    }
+```
+
 
 ## Details
 

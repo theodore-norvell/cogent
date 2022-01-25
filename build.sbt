@@ -49,9 +49,8 @@ version := "1.0"
 libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.0.0"
 
 
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9" // ???
 
-// libraryDependencies += "org.scalactic" %% "scalactic" % "3.2.9"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9" % "test"
 
 logBuffered in Test := false
