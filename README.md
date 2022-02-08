@@ -65,7 +65,7 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
 
 In this particular example, the input status in both cases will be `OK_STATUS`, since `start` and `stop` are the first actions on their compound transitions. In both cases, the output status is ignored since `start` and `stop` are also the last actions on their transitions, and there are no subsequent guards that depend on the status.
 
-* For each guard, there needs to be a function of type `bool (const event_p *)`.  For the example above, we would need
+* For each guard, there needs to be a function of type `bool (const event_p *, status_t)`.  For the example above, we would need
 
 ```C
     bool READY(const event_p *, status_t) {
@@ -227,7 +227,7 @@ Cogent will make up names for the regions, like `A_region_0` and `A_region_1`. C
 
 Cogent has it's own way of looking at states, which differs a bit from the UML standard. To better understand its error messages, it helps to understand this.
 
-* Basic states: The same as UML's simple states.
+* BASIC states: The same as UML's simple states.
 * AND states: Composite states with multiple regions are called AND states.
 * OR states: The entire diagram is an OR state.  Composite states with only one region are OR states.  Regions that have at least one sibling region are also OR states.
 
@@ -236,11 +236,11 @@ For example in the diagram above:
 * The diagram is an OR state, the root state.
 * `Controller` is an AND state and is the only child of the root state
 * `Controller`'s three regions are each OR states and are children of the AND state.
-* All others are simple states which are children of the OR states representing the regions.
+* All others are BASIC states which are children of the OR states representing the regions.
 
 In the previous diagram, W, W2, W3, and the whole diagram are OR states.  The single region inside of W, for example, is not considered to be a state.
 
-It might be logical to consider W, W2, and W3 to be AND states, each with one child (its region), which is an OR state. That way all OR states would correspond to a region -- if we consider the whole diagram to be a region. But this is not the way Cogent sees it.  (This might change if we every support internal actions.)
+It might be logical to consider W, W2, and W3 to be AND states, each with one child (its region), which is an OR state. That way all OR states would correspond to a region -- if we consider the whole diagram to be a region. But this is not the way Cogent sees it.  (This might change if we ever support internal actions.)
 
 #### Initial pseudostates
 
@@ -272,10 +272,6 @@ Supporting them in the future is fairly important since: PlantUML can have troub
 * Terminate pseudostates are not supported.
 * Fork and join pseudostates are not supported.
 
-#### Forks, Joins, and other pseudostates
-
-Other pseudostates not supported. 
-
 #### Notes
 
 Notes are ignored.
@@ -296,12 +292,12 @@ There is a set of states which are the active states.
 
 When the machine is at rest. We have the following invariants:
 
-* ROOT The root state is always active.
-* OR0 For any OR state, including the root state, if the OR state is active, then the current child of the OR state is also active.
-* OR1 When an OR state is active, none of its children except its current child are active.
-* OR2 When an OR state is not active, none of its children are active.
-* AND0 For any AND state, if it is active, all of its children will be active.
-* AND1 For any AND state, if it is not active, none of its children will be active.
+* ROOT: The root state is always active.
+* OR0: For any OR state, including the root state, if the OR state is active, then the current child of the OR state is also active.
+* OR1: When an OR state is active, none of its children except its current child are active.
+* OR2: When an OR state is not active, none of its children are active.
+* AND0: For any AND state, if it is active, all of its children will be active.
+* AND1: For any AND state, if it is not active, none of its children will be active.
 
 Invariants OR0 and AND0 could be untrue when the machine is not at rest .  Consider this example
 
@@ -330,17 +326,17 @@ state W {
 @enduml
 ```
 
-Suppose W, W2, and W22 are all active. This implies (by the invariant) that W2 is the current child of W and W22 is the current child of W2.  Let's also suppose that W31 is the current child of W3.
+Suppose W, W2, and W22 are all active and the machine is at rest. This implies (by the invariant) that W2 is the current child of W and W22 is the current child of W2.  Let's also suppose that W31 is the current child of W3.
 
 * First W22 is exited, so it becomes inactive.
 * At this point, W2 is active, but its current child is not, violating OR0
 * Next W2 is exited, so it also becomes inactive.
 * That fixes the violation just noted.
 * But now W is active, but its current child, W2, is not!, violating OR0 again.
-* At this point, action p takes, place. Then guards A and B are evaluated and then either actions p or q. So the code you write might execute while OR0 are violated.
+* At this point, action p takes place. Then guards A and B are evaluated and then either actions q or r. So the code you write might execute while OR0 are violated.
 * Supposing B is true and A is false, then W3 will be become active and at the same time it becomes the current child of W, thus correcting the violation of OR0.
-* However, since W31 is the current child of W3, then it will be exited and become inactive, creating another violation of OR0.
-* Finally, W32 is entered and becomes active and at at same time becomes the active child of W3. This corrects ensures that OR0 is true everywhere.
+* However, since W31 is the current child of W3 but is not active, there is a new violation of OR0.
+* Finally, W32 is entered and then becomes active and at at same time becomes the current child of W3. This ensures that OR0 is true everywhere.
 
 Similarly at the point when the exit or entry action of an AND state is executed, we can expect that AND0 will be violated for that AND state.
 
@@ -394,9 +390,9 @@ All keywords (else, not, and, or, implies, OK, in) are case sensitive.
 
 A sequence of one or more actions can follow a slash "/". Each action can be followed by an semicolon, but this is optional.  Examples
 
-* "" an empty sequence is indicated by the absence of a slash
-* "/ a" or "/ a;" a sequence of 1 action
-* "/ a b c", "/ a; b; c", "/ a; b; c;" etc. A sequence of three actions
+* ` `  — an empty sequence is indicated by the absence of a slash
+* `/ a` or `/ a;`  — two ways to write a sequence of 1 action
+* `/ a b c`, `/ a; b; c`, `/ a; b; c;` — three ways to write a sequence of three actions
 
 #### Actions
 
@@ -410,7 +406,7 @@ Each action is either
 
 Transitions come in three flavours
 
-* Strawberry: From a initial pseudo state to a state with the same parent. These transitions must not be labelled.
+* Strawberry: From a initial pseudo state to a state with the same parent.
 * Vanilla: From a state (simple or composite) to another state or to a choice pseudostate.
 * Chocolate: From a choice psuedostate to another choice psuedostate.
 
@@ -422,36 +418,36 @@ Chocolate transitions should not have a trigger.
 
 Chocolate transitions may not form a cycle.
 
-For state any state, if there is more than one transition out of it with the same named trigger then of these transitions:
+For any state, if there is more than one transition out of it with the same named trigger then, of these transitions:
 
-* At most one may be guarded with an else.
-* None may be unguarded.
+* at most one may be guarded with an else and
+* none may be unguarded.
 
 The same restrictions apply to the set of all transitions that leave a given choice pseudo-state.
 
 ### Using guards appropriately
 
-A vanilla transition is enabled if its source state is active
-* It has no guard.
-* It has a guard that is true.
-* It has an else guard and all the competing guards are false.
+A vanilla transition is enabled if its source state is active and:
+* it has no guard,
+* it has a guard that is true, or
+* it has an else guard and all the competing guards are false.
 
 When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example if there are guards A, B. The generated code might look like this
 
 ```C
    status_t status = OK_STATUS ;
-   if( A(event_p, status) ) { do transition guarded by A }
-   else if( B(event_p, status) ) { do transition guarded by B }
-   else { do nothing }
+   if( A(event_p, status) ) { <<Do transition guarded by A>> }
+   else if( B(event_p, status) ) { <<Do transition guarded by B >>}
+   else { <<Do nothing>> }
 ```
 
 or like this:
 
 ```C
    status_t status = OK_STATUS ;
-   if( B(event_p, status) ) { do transition guarded by B }
-   else if( A(event_p, status) ) { do transition guarded by A }
-   else { do nothing }
+   if( B(event_p, status) ) { <<Do transition guarded by B>> }
+   else if( A(event_p, status) ) { <<Do transition guarded by A>> }
+   else { <<Do nothing>> }
 ```
 
 For the set of all edges leaving a given state that are all labelled with the same named trigger:
@@ -460,19 +456,19 @@ For the set of all edges leaving a given state that are all labelled with the sa
 
 Once a vanilla transition is traversed, the machine is committed, there is no turning back. If it reaches a choice state where no guard is true, the dispatcher will call `assertUnreachable()`.
 
-E.g. if the two transitions out of a choice pseudostate are guarded by A and B the generated code could be
+E.g. if the only two transitions out of a choice pseudostate are guarded by A and B the generated code could be
 
 ```C
-   if( A(event_p, status) ) { do transition guarded by A }
-   else if( B(event_p, status) ) { do transition guarded by B }
+   if( A(event_p, status) ) { <<Do transition guarded by A>> }
+   else if( B(event_p, status) ) { <<Do transition guarded by B>> }
    else { assertUnreachable() ; }
 ```
 
 or
 
 ```C
-   if( B(event_p, status) ) { do transition guarded by B }
-   else if( A(event_p, status) ) { do transition guarded by A }
+   if( B(event_p, status) ) { <<Do transition guarded by B>> }
+   else if( A(event_p, status) ) { <<Do transition guarded by A>> }
    else { assertUnreachable() ; }
 ```
 
@@ -557,11 +553,11 @@ Suppose the active states are A, B, and D.
 * If not P and Q, the situation is similar. Only the transition from D to E fires.
 * If P and Q, then both the transition from B to C and the transition from D to E will fire and the transition from A to F will be blocked by pre-emption.
 
-When two vanilla transitions fire in concurrently, as in the previous example, they actually go sequentially on the same thread, so there is no need to worry about mutual exclusion and race conditions between x and y. The generated code will follow this algorithm:
+When two vanilla transitions fire concurrently, as in the previous example, they actually go sequentially on the same thread, so there is no need to worry about mutual exclusion and race conditions between x and y. The generated code will follow this algorithm:
 
 1. if P : exit B; do x; enter C
 1. if Q : exit D; do y; enter E
-1. if neither of the above happened: exit B; exit A's upper region; exit D; exit A's lower region; exit A; do z; enter F
+1. if neither of the above happened (i.e. P and Q were both false when evaluated): exit B; exit A's upper region; exit D; exit A's lower region; exit A; do z; enter F
 
 or the same with the first two lines swapped.  Likewise the exits on the last line could happen in an alternative order
 
@@ -571,9 +567,9 @@ As you can see from algorithm of the generated code, the x action should not eff
 
 ### Local vs external transitions
 
-UML considers transitions to be either **external** or **local**. Local transitions do not exit the state they are in, whereas external transitions do.
+UML considers transitions to be either **external** or **local**. Local transitions do not exit the state which they start at, whereas external transitions do.
 
-Consider these two diagrams. The only difference between the input files is that the second file uses In the first, PlantUML renders the transition from M to O as exiting M before re-entering M and ending at O.  This is the correct notation for an external transition. In this case the y action should be executed.
+Consider these two diagrams. The only difference (aside from the action's name) between the input files is that the first file uses "->" for the M to O transition, which the second uses "-->". In the first, PlantUML renders the transition from M to O as exiting M before re-entering M and ending at O.  This is the correct notation for an external transition. In this case the y action should be executed.
 
 ![External transition diagram](diagrams/external.png)
 
@@ -603,7 +599,12 @@ state M {
 @enduml
 ```
 
-Cogent considers all vanilla and chocolate transitions to be external.
+Cogent currently considers all vanilla and chocolate transitions to be external. That is that they exit their source and they enter their destination, even if PlantUML draws the diagram "wrong", as in the previous image.
+
+[There should really be a warning when 
+the diagram could be drawn either way.]
+
+[Note that this aspect of cogent may change in the future.]
 
 ### PlantUML limitation on edges
 
@@ -622,4 +623,4 @@ state R {
 @enduml
 ```
 
-Cogent doesn't have any problem with these transitions in principle. But, since it uses PlantUML for parsing, it can't handle them.
+Cogent doesn't have any problem with these transitions in principle. But, since it uses PlantUML for parsing, they are rejected by Cogent's parser.
