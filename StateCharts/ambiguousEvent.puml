@@ -1,0 +1,13 @@
+@startuml
+
+state A
+state B
+state C
+
+[*] -down-> A
+A -left->  B: x / b
+A -right-> C : x / c
+B -right-> A: x / a
+C -left-> A: x / a
+@enduml
+

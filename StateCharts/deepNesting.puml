@@ -1,0 +1,35 @@
+@startuml
+[*] -> C
+state C {
+[*] -right-> B
+state A {
+    [*] --> A2
+    state A1 {
+        [*] --> A12
+        state A11 {
+            [*] -> A111
+            state A111
+            state A112
+        }
+        state A12
+    }
+    state A2
+}
+state B {
+    [*] --> B2
+    state B2
+    state B1 {
+        [*] --> B12
+        state B12
+        state B11 {
+            [*] -> B112
+            state B112
+            state B111
+        }
+    }
+}
+}
+state D
+
+A11 -> B11: a
+@enduml

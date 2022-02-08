@@ -1,0 +1,21 @@
+@startuml
+
+[*] -right-> Normal
+state Normal {
+    [*] -right-> NorthSouthGreen
+    state NorthSouthGreen: entry: st(20) ; ns(green) ; ew(red)
+    state NorthSouthAmber: entry:  st(5) ; ns(amber)
+    state EastWestGreen: entry: st(30) ; ns(red) ; ew(green)
+    state EastWestAmber: entry: st(5) ; ew(amber)
+    NorthSouthGreen -right-> NorthSouthAmber : timer 
+    NorthSouthAmber -down-> EastWestGreen : timer 
+    EastWestGreen -left-> EastWestAmber : timer 
+    EastWestAmber -up-> NorthSouthGreen : timer 
+}
+state AllRed: entry: ns(red) ; ew(red)
+
+
+Normal -right-> AllRed : ev?approaches 
+AllRed -left-> Normal : ev?clear 
+
+@enduml

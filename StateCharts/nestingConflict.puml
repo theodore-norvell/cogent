@@ -1,0 +1,22 @@
+@startuml
+state A {
+    [*] --> A2
+    state A1 {
+        [*] --> A12
+        state A11 
+        state A12
+    }
+    state A2
+}
+state B {
+    [*] --> B2
+    state B2
+    state B1 {
+        [*] --> B12
+        state B12
+        state B11 
+    }
+}
+A -> B11: a / x
+A11 -> B: a / y
+@enduml

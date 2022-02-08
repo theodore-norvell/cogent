@@ -1,0 +1,15 @@
+@startuml
+
+state A {
+    state B
+    state C
+    [*] -> B
+    B -> C : go / int
+    C -> B : stop / y
+    --
+    state D
+    state E
+    [*] -> D
+    D -> E : int / x
+}
+@enduml

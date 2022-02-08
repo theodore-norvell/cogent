@@ -1,0 +1,76 @@
+@startjson
+{
+    "name": "root",
+    "kind": "OR",
+    "children": [
+        {
+            "name": "A",
+            "kind": "AND",
+            "children": [
+                {
+                    "name": "B",
+                    "kind": "OR",
+                    "children": [
+                        {
+                            "name": "C",
+                            "kind": "BASIC"
+                        },
+                        {
+                            "name": "D",
+                            "kind": "BASIC"
+                        }
+                    ]
+                },
+                {
+                    "name": "E",
+                    "kind": "OR",
+                    "children": [
+                        {
+                            "name": "F",
+                            "kind": "BASIC"
+                        },
+                        {
+                            "name": "G",
+                            "kind": "BASIC"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "H",
+            "kind": "AND",
+            "children": [
+                {
+                    "name": "I",
+                    "kind": "OR",
+                    "children": [
+                        {
+                            "name": "J",
+                            "kind": "BASIC"
+                        },
+                        {
+                            "name": "K",
+                            "kind": "BASIC"
+                        }
+                    ]
+                },
+                {
+                    "name": "L",
+                    "kind": "OR",
+                    "children": [
+                        {
+                            "name": "M",
+                            "kind": "BASIC"
+                        },
+                        {
+                            "name": "N",
+                            "kind": "BASIC"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+@endjson

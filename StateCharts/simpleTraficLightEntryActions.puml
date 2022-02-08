@@ -1,0 +1,32 @@
+@startuml
+
+[*] -right-> NorthSouthGreen
+
+state NorthSouthGreen
+NorthSouthGreen: entry: st(20) ; ns(green) ; ew(red)
+
+state NorthSouthAmber
+NorthSouthAmber: entry:  st(5) ; ns(amber)
+
+state EastWestGreen
+EastWestGreen: entry: st(30) ; ns(red) ; ew(green)
+
+state EastWestAmber: 
+EastWestAmber: entry: st(5) ; ew(amber)
+
+state AllRed
+AllRed: entry: ns(red) ; ew(red)
+
+
+NorthSouthGreen -down-> AllRed : ev?approaches 
+NorthSouthAmber ---left---> AllRed : ev?approaches 
+EastWestGreen -up-> AllRed : ev?approaches 
+EastWestAmber ---right---> AllRed : ev?approaches 
+
+AllRed -up-> NorthSouthGreen : ev?clear 
+
+NorthSouthGreen -right-> NorthSouthAmber : timer 
+NorthSouthAmber -down-> EastWestGreen : timer 
+EastWestGreen -left-> EastWestAmber : timer 
+EastWestAmber -up-> NorthSouthGreen : timer 
+@enduml

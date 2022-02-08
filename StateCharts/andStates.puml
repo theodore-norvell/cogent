@@ -1,0 +1,25 @@
+@startuml
+    [*] -> A
+    state A {
+        note "B" as B
+        [*] -> C
+        state C
+        state D
+        --
+        note "E" as E
+        [*] -> F
+        state F
+        state G
+    }
+    state H {
+        note "I" as I
+        [*] -> J
+        state J
+        state K
+        ||
+        note "L" as L
+        [*] -> M
+        state M
+        state N
+    }
+@enduml

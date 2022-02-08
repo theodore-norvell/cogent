@@ -1,0 +1,34 @@
+@startuml
+
+
+
+state LevelMonitor  {
+        state Running
+        state J1 <<choice>>
+        state J2 <<choice>>
+
+        [*] --> Running
+        J1 -> Running : / level := level + 1
+        J2 -> Running : / level := level - 1
+
+        Running -left> J1 : inc 
+        Running -right> J2 : dec 
+    --
+        state Nominal
+        state High 
+        state Low 
+        [*] --> Nominal
+        Nominal -right> Low : after(0s) [level < 10] 
+        Nominal -left> High : after(0s) [level > 100] 
+        Low -left> Nominal : after(0s) [level > 11] 
+        High -right> Nominal : after(0s) [level < 99] 
+    --
+        state Ringinig : entry / turnBellOn
+        state NotRinging: entry / turnBellOff 
+        [*] -> NotRinging
+        NotRinging -> Ringinig : after(0s) [in Nominal]
+        Ringinig -> NotRinging : after(0s) [not in Nominal ]
+}
+LevelMonitor : entry / level := 50
+[*] --> LevelMonitor
+@enduml

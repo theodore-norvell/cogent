@@ -1,0 +1,12 @@
+@startuml
+
+[*] --> State1
+State1 --> [*]
+State1 : this is a string
+State1 : this is another string
+
+State1 -> State2 : [ not ready ] / power!m()
+State2 -> State3 : power?mess(1,3)
+State2 --> [*]
+
+@enduml

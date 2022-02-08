@@ -1,0 +1,16 @@
+@startuml
+    [*] -> A
+    state A {
+        note "B" as B
+        [*] -> C
+        state C
+        state D
+        C -> D: a / x
+        --
+        note "E" as E
+        [*] -> F
+        state F
+        state G
+        F -> G: a / y
+    }
+@enduml
