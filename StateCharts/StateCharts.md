@@ -1,4 +1,4 @@
-# Implementing StateCharts
+# Statecharts
 
 ## Introduction
 
@@ -7,10 +7,6 @@ Statecharts are a formalism for describing finite state machines.  Statecharts a
 Statecharts were introduced by David Harel in the 1980s [1].  Because they are visual and fairly simple to understand, he found that they were a good medium for expressing behavioural ideas to people who are not familiar with other ways of expressing algorithms, such as code, pseudocode, or flowcharts.  (More on flowcharts later.)  In Harel's case he developed them while consulting for the Israeli air force and he found them to be a good medium for presenting algorithmic ideas to pilots.
 
 In the 1990s, statecharts were adopted as one of the diagram types in UML. As a result there is a standard syntax and a fairly well defined semantics, suitable for software.  My understanding of the finer points of the semantics comes largely from von der Beeck's article on the semantics of UML statecharts, which is  based on the UML specification.
-
-The point of this article is to try to explain statecharts and look at how to implement them for real-time embedded systems.  The strategy that I'll take is to introduce the features of statecharts a few at a time and look at how to modify our implementation strategy to accommodate the newly introduced ideas.
-
-**Reading this document:**  If you aren't familiar with statecharts, I'd suggest reading this document twice.  The first time, skip the sections with "implementation" in their names; that will give an introduction to statecharts.  Then read the document again, this time reading the implementation.
 
 ## Simple state machines
 
@@ -63,6 +59,7 @@ Statecharts handle one event at a time.  Events are usually processed in the ord
 >
 >> `current_state` := the initial state<br>
 >> loop 
+>>> Wait until one or more events are ready to be processed
 >>> Pick an event `e` to process<br>
 >>  Process event `e`
 >> 
@@ -73,8 +70,8 @@ Statecharts handle one event at a time.  Events are usually processed in the ord
 >> if there are one or more transitions out of the `current_state` labeled with the signal class of `e`
 >>
 >>> if there is more than one, optionally log an ambiguous event end if<br>
->>>`t` := one of these transitions  (0)<br>
->>>Execute the action sequence of transition `t`.<br>
+>>>`t` := one of these transitions <br>
+>>>Execute the action sequence of transition `t`<br>
 >>>`current_state` := the destination state of `t`
 >>
 >> else if it is not a `TICK` event
@@ -99,17 +96,15 @@ We can associate "entry" and "exit" actions with each state.  This often allows 
 
 ![Entry Traffic Light](simpleTraficLightEntryActions.png)
 
-~
-
 ## Nested OR states
 
-One way that Statecharts help us is by allowing states to be nested.  So the set of states will make a tree.  We've already seen that there is a conceptual OR node at the root.
+One way that Statecharts go beyond ordinary state machines is by allowing states to be nested.  So the set of states will make a tree.  The parent of such a nested state is called an OR node. (Later we'll see that parents can also be AND nodes.) We've already seen that there is a conceptual OR node at the root.
 
 Here is an example with an OR node that is not the root.
 
 ![Nested Traffic Light](nestedTrafficLight.png)
 
-There are significantly fewer transitions.   Generally nesting states helps to keep complex machines reasonably concise and readable.
+There are significantly fewer transitions.   Generally, nesting states helps to keep complex machines reasonably concise and readable.
 
 Nesting creates some issues.  The first that the machine can now be "in" multiple states at the same time.  I.e., more than one state can be active.   The rule for OR states is
 
@@ -126,7 +121,7 @@ If the designers decided that it is better to go from `AllRed` to a different st
 
 ![Nested Traffic Light Interlevel](nestedTrafficLightInterlevel.png)
 
-This is an example of an interlevel transitions. It's usually good advice to avoid them, but sometimes they are very useful.
+This is an example of an interlevel transition. It's usually good advice to avoid them, but sometimes they are very useful.
 
 What does this mean for entry and exit actions?
 
@@ -134,7 +129,7 @@ Consider this example
 
 ![Deep Nesting](deepNesting.png)
 
-Suppose the active states are {C, A, A1, A11, A112} and the transition happens.  The states {A, A1, A11, A112}, but not C, are all exited, so their exit actions must take place.  Then the states {B, B1, B11, B112} need to be entered, so their entry actions are executed.  B112 is entered of course because it's the start state for B11.  Exits should happen bottom-up. Entries should happen top-down.  
+Suppose the active states are {C, A, A1, A11, A112} and the transition from A11 to B11 is triggered.  The states {A, A1, A11, A112}, but not C, are all exited, so their exit actions must take place.  Then the states {B, B1, B11, B112} need to be entered, so their entry actions are executed.  B112 is entered of course because it's the start state for B11.  Exits should happen bottom-up. Entries should happen top-down.  
 
 > Exit actions: A112, A11, A1, A <br>
 > Transition actions <br>
@@ -194,10 +189,10 @@ Transitions into and out of AND states are interesting, but basically logical.  
 Suppose the active states are {root, A, B, D, E, G}.  Any of the four transitions can happen
 
 * `a`. In this case A must be exited, so B and E must exited, so D and G must be exited.  All this happens in postfix order. But exits from the AND's children could happen in either order.  So the order of exits is either
-     * D, B, B, E, A or G, E, D, B, A.
-     * After all these exits, the transition action happens.
-      * Next, H is entered and so I and L must be entered and so J and M are entered.  Now it's prefix order, but the order that the children of the AND are entered is nondeterministic. So the possible orders are
-      * H, I, J, L, M or H, L, M, I, J
+    * D, B, G, E, A or G, E, D, B, A.
+    * After all these exits, the transition action happens.
+    * Next, H is entered and so I and L must be entered and so J and M are entered.  Now it's prefix order, but the order that the children of the AND are entered is nondeterministic. So the possible orders are
+    * H, I, J, L, M or H, L, M, I, J
 * Events `c` and `d` are similar.
 * Event `d` is similar, except that J is entered instead of K.
 
@@ -207,7 +202,7 @@ By the way PlantUML can't handle transition in and out of regions. That's why th
 
 ### Guards 
 
-Guards are boolean expressions written in a transition's label. The syntax for labels is now
+Guards are boolean expressions written in a transition's label.
 
 The syntax for transition labels, so far, is one of
 
@@ -300,12 +295,12 @@ Another way for pseudo-threads to communicate is by firing signals. For example
 
 Here if the active states are {`A`, `B`, `D`} and a `go` signal happens, first there will be a transition to {`A`, `C`, `D`}. The action here is `int`, which is also an signal. Executing `int` as an action queues an `int` signal. This will cause a subsequent transition from `D` to `C`.
 
-Note that this is an asynchronous communication betweent the pseudo states.  In David Harel's original statechart semantics, internal communications like this were synchronous, meaning that there would be an immediate transition from {`A`, `B`, `D`} to {`A`, `C`, `E`}.  This makes a lot of sense if you are modelling clocked digital hardware, where the entire transition can be made from one clock cycle to the next.  Later, when Harel developed the statechart tools for software, he introduced the asynchronous interpretation.
+Note that this is an asynchronous communication between the pseudo states.  In David Harel's original statechart semantics, internal communications like this were synchronous, meaning that there would be an immediate transition from {`A`, `B`, `D`} to {`A`, `C`, `E`}.  This makes a lot of sense if you are modelling clocked digital hardware, where the entire transition can be made from one clock cycle to the next.  Later, when Harel developed the statechart tools for software, he introduced the asynchronous interpretation.
 
 In UML statecharts, the order that events are processed is not defined. Suppose that a `go` and `stop` message arrive in quick succession. Both will be queued. If the `go` message is processed first, it will create an `int` signal, which is also queued. Whether the `int` or `stop` signal is processed next is not defined by the UML standard. So the sequence of transitions could be either
 
 * $\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt go / int}}{\longrightarrow}\{{\tt A},{\tt C},{\tt D}\}\stackrel{{\tt int / x}}{\longrightarrow}\{{\tt A},{\tt C},{\tt E}\}\stackrel{{\tt stop / y}}{\longrightarrow}\{{\tt A},{\tt B},{\tt E}\}$ or
-* $\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt go / int}}{\longrightarrow}\{{\tt A},{\tt C},{\tt D}\}\stackrel{{\tt stop / y}}{\longrightarrow}\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt int / x}}{\longrightarrow}\{{\tt A},{\tt B},{\tt E}\}$.
+* $\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt go / int}}{\longrightarrow}\{{\tt A},{\tt C},{\tt D}\}\stackrel{{\tt stop / y}}{\longrightarrow}\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt int / x}}{\longrightarrow}\{{\tt A},{\tt B},{\tt E}\}$
 
 ### More on triggers
 
@@ -318,11 +313,11 @@ A trigger is what determines whether a transition can proceed, so far we've only
 
 Wnere a *trigger* is one of
 
-> *call event* <br>
 > *signal event* <br>
-> *any recieve event* <br>
-> *change event*
 > *time event*
+> *change event*<br>
+> *call event* <br>
+> *any receive event* <br>
 
 Of these
 
@@ -340,7 +335,7 @@ There are two kinds of time event. The first looks like this
 
 where the duration is something like `0s` or `45ms`.  The corresponding time event happens when that much time has elapsed since the source state was entered.
 
-The second kind is look like this
+The second kind looks like this
 
 > `at(` *time* `)`
 
@@ -358,83 +353,10 @@ Signals are often parameterized, especially when the signal corresponds to a mes
 
 ### History
 
-An OR state can contain a "shallow history" and/or "deep history" pseudo state. Transitions from outside the OR state can end at a pseudo-state.
+An OR state can contain a "shallow history" and/or "deep history" pseudo state. Transitions from outside the OR state can end at such a pseudo-state.
 
 * If the transition ends at a shallow history pseudo-state then the target of the transition is the latest child of the OR state to be active.
 * If the transition ends at a deep history pseudo-state, then the target of the transition is the latest descendant of the OR state to be active.
-
-
-To each transition add a field that holds one of three enumeration values `NO_HISTORY`, `SHALLOW_HISTORY`, or `DEEP_HISTORY`.  If the history field is not `NO_HISTORY`, the target state must be an OR state.
-
-~~~c
-struct TransitionS {
-    StateT *pSource ;
-    ActionT *pAction ;
-    StateT *pTarget ;
-    HistoryT history ;
-} ;
-~~~
-
-Now modify `doTransition`:
-
-~~~c
-void doTransition( EventT *pEvent, TransitionT *pTransition )  {
-    ... as before ...
-
-    enterState( pTarget, pLCAO, pTransition->history ) ;
-}
-~~~
-
-Modify `enterState`
-
-~~~c
-void enterState( StateT *pState, StateT *pLimit, HIstoryT history) {
-    if( history == DEEP_HISTORY ) {
-        assertThat( pState->kind == OR ) ;
-        /* Enter all the states above pState up to but not including the limit. */
-        enterAbove( pState->pParent, pLimit, pState->index ) ;
-        /* Enter the state and its active children without
-        resetting the activeChild fields */
-        reenterState( pState ) ;
-    } else {
-        if( history == SHALLOW_HISTORY ) {
-            assertThat( pState->kind == OR ) ;
-            pState = pState->children[ pState->activeChild ] ;
-        } else
-            assertThat( history == NO_HISTORY ) ;
-        /* Enter all the states above pState up to but not including the limit. */
-        enterAbove( pState->pParent, pLimit, pState->index ) ;
-        /* Enter pState and any below it. */
-        resetState( pState ) ;
-    }
-}
-~~~
-
-Finally we need a `reenterState` function that is much like the `resetState`, but that doesn't change the active children.  This was used for `DEEP_HISTORY`.
-
-~~~c
-void reenterState( StateT *pState ) {
-    (pState->pEntryAction)() ;
-    switch( pState->kind) {
-    
-        case BASIC: {
-        } break ;
-        
-        case OR: {
-            StateT *pChild = pState->children[ pState->activeChild ] ;
-            reenterState( pChild ) ;
-        } break ;
-        
-        case AND: {
-            for( int i=0 ; i < pState->childCount; ++i ) {
-                StateT *pChild = pState->children[ i ] ;
-                reenterState( pChild ) ;
-            }
-        } break ;
-        
-        default: { assertThat( false ) ; }
-}
-~~~
 
 ### State invariants
 
