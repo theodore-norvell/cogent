@@ -26,6 +26,8 @@ class COutputter( override val writer : PrintWriter ) extends Outputter( writer 
             cases
             if exhaustive then
                 put("default : { assertUnreachable() ; }")
+            else
+                put("default : { }")
             end if
         }
     }

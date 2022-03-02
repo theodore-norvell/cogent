@@ -6,6 +6,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
     private val handledArrayName = "handled_a"
     private val eventPointerName = "event_p"
     private val statusVarName = "status"
+    private val okStatusConstant = "OK_STATUS"
 
     def generateCCode( stateChart : StateChart ) : Unit = {
         val root = stateChart.root
@@ -109,13 +110,17 @@ class Backend( val logger : Logger, val out : COutputter ) :
             val globalIndexMacro = globalMacro(state) 
 
             if state.childStates.size == 0 then
+                // No children.  Not possible. All Or nodes should have a start state
+                // and this requirement should already have been checked.
                 assert( false ) ;
             else if state.childStates.size == 1 then
+                // An Or with one child does not need a switch command
                 val child = state.childStates.head
                 generateCodeForState( child, stateChart )
                 out.put( s"${handledArrayName}[ $globalIndexMacro ] = ${handledArrayName}[ ${globalMacro(child)} ] ;")
                 out.endLine
             else /* state.childStates.size > 1 */
+                // Generate a switch command.
                 out.switchComm(true, s"${currentChildArrayName}[ $globalIndexMacro]"  ) {
                     for child <- state.childStates do
                         out.caseComm( localMacro(child)  ) {
@@ -203,6 +208,8 @@ class Backend( val logger : Logger, val out : COutputter ) :
 
     def generateIfsForEdges( name : String, node : Node, edges : Set[Edge], stateChart : StateChart) : Unit = {
         assert( node.isState || node.isChoicePseudostate )
+        if( node.isState )
+            out.put( s"status_t ${statusVarName} = ${okStatusConstant} ;") ; out.endLine
         val elseGuardedEdges = edges.filter( e => e.guardOpt.map( g => g match{
                                                     case Guard.ElseGuard() => true
                                                     case _ => false } ).getOrElse( false ) ) ;
@@ -212,7 +219,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             // Case: There too many (more than 1) else-guarded edges, too many unguarded edges, or too many of both.
             logger.fatal( s"More than one transition out of ${node.getFullName} with trigger $name has no guard or an else guard." )
         else if unguardedEdges.size == 1 then
-            // Case: There is oneguarded edge ...
+            // Case: There is one guarded edge ...
             if nonElseGuardedEdges.size > 1 then
                 // ... but there are also other edges
                 logger.fatal( s"Vertex ${node.getFullName} with trigger $name has both unguarded and guarded transitions" )
@@ -228,14 +235,14 @@ class Backend( val logger : Logger, val out : COutputter ) :
             assert( unguardedEdges.size == 0 )
             assert( elseGuardedEdges.size < 2 )
             // TODO check guards for
-            //  Overlap -- 2 guards could both be true
-            //  Underlap -- all guards could be false and there is no else. (This would be info for states and warning for branch nodes)
-            //  Pointless else -- not all guards can be false but there is an else.
+            //  Overlap -- there exists a state where 2 or more guards could both be true
+            //  Underlap -- there exists a state where all guards are false and there is no else. (This would be info for states and warning for branch nodes)
+            //  Pointless else -- in all states at least one guard is true, but there is an else.
 
             // For each edge that is not guarded by an else, output "if(...) {...} else "
             for edge <- nonElseGuardedEdges do
                 val guard = edge.guardOpt.head
-                out.ifComm{ generateGuardExpression( guard, stateChart ) }{
+                out.ifComm{ generateGuardExpression( guard, stateChart, node ) }{
                     if node.isState then
                         out.put( s"${handledArrayName}[${globalMacro(node)}] = true ; " ) 
                         out.endLine
@@ -267,8 +274,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         assert( target.isState || target.isChoicePseudostate )
         val actions = edge.actions
         out.comment( s"Transition from ${source.getCName} to ${target.getCName}." ) ; out.endLine
-        if( source.isState )
-            out.put( s"status_t ${statusVarName} = OK_STATUS ;") ; out.endLine
+
 
         val leastCommonOr = stateChart.leastCommonOrOf( source, target )
 
@@ -322,7 +328,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             generateIfsForEdges( "none", target, edges, stateChart )
     }
 
-    def generateGuardExpression( guard : Guard, stateChart : StateChart ) : Unit = {
+    def generateGuardExpression( guard : Guard, stateChart : StateChart, sourceNode : Node ) : Unit = {
         out.endLine
         out.indent
         gge( guard )
@@ -332,7 +338,12 @@ class Backend( val logger : Logger, val out : COutputter ) :
         def gge( guard : Guard ) : Unit = {
             guard match
                 case Guard.ElseGuard() => assert(false, "Else where else should not be")
-                case Guard.OKGuard() => out.put( s"OK( $statusVarName )" )
+                case Guard.OKGuard() =>
+                    if sourceNode.isState then
+                        logger.warning( s"Vertex ${sourceNode.getFullName} has an OK guard, but this will always be true at the start of a transition." ) ;
+                        out.put( "true" )
+                    else
+                        out.put( s"OK( $statusVarName )" )
                 case Guard.InGuard( name : String ) => 
                     // TODO. Bug! What if the name was changed!
                     out.put( s"${isInArrayName}[ ${globalMacro(name, stateChart)} ]" )
