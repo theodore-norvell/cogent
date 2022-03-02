@@ -20,7 +20,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.put( s"static bool_t $isInArrayName[ STATE_COUNT ] ;" )
         out.blankLine
         
-        out.put( s"bool dispatchEvent( event_t *${eventPointerName} ) " )
+        out.put( s"bool_t dispatchEvent( event_t *${eventPointerName} ) " )
        
         out.block{
             out.put( s"bool_t ${handledArrayName}[ STATE_COUNT ] = {false};" )
@@ -253,7 +253,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             else
                 out.block{
                     logger.warning( s"Vertex ${node.getFullName} has no else guarded transition. If none of the guards are true, the code will crash." )
-                    out.put( "assertUnreachable()" )
+                    out.put( "assertUnreachable() ;" )
                     out.endLine
                  }
             end if

@@ -1,6 +1,6 @@
 package cogent
 
-class LogToStdOut( var maxLevel : Logger.Level ) 
+class LogToStdError( var maxLevel : Logger.Level ) 
     extends Logger :
     import Logger.Level
 
@@ -20,6 +20,6 @@ class LogToStdOut( var maxLevel : Logger.Level )
             case Level.Warning => {color = WARNCOLOR ; endColor = ENDCOLOR ; }
             case _ => {}
         if level.ordinal <= maxLevel.ordinal then
-            println( s"$color[$level] $message$endColor")
+            System.err.println( s"$color[$level] $message$endColor") 
         if level == Logger.Level.Fatal then
             fatalCount += 1

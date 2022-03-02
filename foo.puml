@@ -39,6 +39,12 @@
             WC -> W1 : [A || OK] / q
             WC -> W32 : [B] / r
         }
+        --
+        note "Z" as Z
+        [*] -> X
+        state X
+        state Y
+        X -> Y: after( 3s ) \n [g and {status==12} and not in F] \n / w
     }
     state A
 @enduml
