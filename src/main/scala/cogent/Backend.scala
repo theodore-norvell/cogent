@@ -16,6 +16,8 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.blankLine
         out.put( "// This array maps the global index of each OR state to the local index of its currently active state" )
         out.endLine
+        out.put( s"typedef unsigned char localIndex_t ;" )
+        out.endLine
         out.put( s"static localIndex_t ${currentChildArrayName}[ OR_STATE_COUNT ] ;" )
         out.endLine
         out.put( s"static bool_t $isInArrayName[ STATE_COUNT ] ;" )
