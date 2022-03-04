@@ -18,6 +18,4 @@ typedef int status_t ;
 
 #define assertUnreachable() (0)
 
-typedef int localIndex_t ;
-
 #include "foo.c"
