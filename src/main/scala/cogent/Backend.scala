@@ -7,24 +7,35 @@ class Backend( val logger : Logger, val out : COutputter ) :
     private val eventPointerName = "event_p"
     private val statusVarName = "status"
     private val okStatusConstant = "OK_STATUS"
+    private val localIndexType = "LOCAL_INDEX_T"
 
-    def generateCCode( stateChart : StateChart ) : Unit = {
+    def generateCCode( stateChart : StateChart, chartName : String ) : Unit = {
         val root = stateChart.root
 
+        out.putLine( s"#ifndef $localIndexType" )
+        out.putLine( s"#define $localIndexType int" )
+        out.putLine( "#endif")
+        out.blankLine
+
         generateDefines( stateChart )
+
+        generateEnterAndExitDecls( stateChart )
         
         out.blankLine
         out.put( "// This array maps the global index of each OR state to the local index of its currently active state" )
         out.endLine
-        out.put( s"typedef unsigned char localIndex_t ;" )
-        out.endLine
-        out.put( s"static localIndex_t ${currentChildArrayName}[ OR_STATE_COUNT ] ;" )
+        out.put( s"static $localIndexType ${currentChildArrayName}[ OR_STATE_COUNT ] ;" )
         out.endLine
         out.put( s"static bool_t $isInArrayName[ STATE_COUNT ] ;" )
         out.blankLine
         
-        out.put( s"bool_t dispatchEvent( event_t *${eventPointerName} ) " )
-       
+        out.put( s"void initStateMachine_${chartName}( ) " )
+        out.block {
+            out.putLine( s"${enterFunctionName(stateChart.root)}( -1 ) ;" )
+        }
+
+        out.blankLine 
+        out.put( s"bool_t dispatchEvent_${chartName}( event_t *${eventPointerName} ) " )
         out.block{
             out.put( s"bool_t ${handledArrayName}[ STATE_COUNT ] = {false};" )
             out.endLine
@@ -33,8 +44,101 @@ class Backend( val logger : Logger, val out : COutputter ) :
             out.put( s"return ${handledArrayName}[ ${globalMacro(root)} ];" )
         }
 
-        // TODO Initialize the activeState_cg_v
+        generateEnterAndExitDefs( stateChart )
+        
     }
+
+    def generateEnterAndExitDecls( stateChart : StateChart ) : Unit = {
+        val states = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
+        for state <- states do
+            out.put( s"static void ${enterFunctionName(state)} ( $localIndexType ) ; "  )
+            out.put( s"static void ${exitFunctionName(state)} ( $localIndexType ) ;" )
+            out.endLine
+    } 
+
+    def generateEnterAndExitDefs( stateChart : StateChart ) : Unit = {
+        val states = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
+        for state <- states do
+            out.blankLine
+            // Generate the enter routine for the the state.
+            out.put( s"static void ${enterFunctionName(state)} ( $localIndexType childIndex ) "  )
+            out.block{
+                out.endLine
+                out.put( s"$isInArrayName[ ${globalMacro(state)} ] = true ;" )
+                out.endLine
+
+                // Entry actions go here.
+
+                state match 
+                    case x @ Node.BasicState( _ ) =>
+                        // There should be nothing more to do
+                    case x @ Node.OrState( _, _ ) =>
+                        // When an Or state is entered. If the transition is to an descendent,
+                        // There will be an enter call for it soon, so there is no need to
+                        // do anything special. Otherwise, we need to  enter the default child.
+                        // The default child should be first in the list of children
+                        val defaultChild = startChild(x)
+                        out.ifComm( " childIndex == -1 "){ out.put( s"${enterFunctionName( defaultChild )}( -1 ) ;") }
+                        out.endLine
+                    case x @ Node.AndState( _, _ ) =>
+                        // When an AND state is entered, all of its children will also be entered.
+                        // There will be another call to enter for the child, if any that is also
+                        // being entered so we don't need to enter than child.
+                        for child <- x.children.filter( _.isState ) do
+                            out.ifComm( s"childIndex != ${localMacro(child)} ") {
+                                    out.put( s"${enterFunctionName(child)}( -1 ) ; ")
+                            }
+                            out.endLine ;
+
+                    case _ => assert( false )
+            }
+            out.endLine
+
+            // Generate the exit routine for the the state.
+            out.put( s"static void ${exitFunctionName(state)} ( $localIndexType childIndex )" )
+            out.endLine
+            out.block{
+                out.endLine
+
+                state match 
+                    case x @ Node.BasicState( _ ) =>
+                        // There should be nothing more to do
+                    case x @ Node.OrState( _, _ ) =>
+                        // When an Or state is exited: If the transition is from an descendent,
+                        // it will already have been exited.
+                        // But if the transition is from this node or any node above it
+                        // then we must exit the current child.
+                        out.ifComm( "childIndex == -1") {
+                            out.putLine(s"$localIndexType current = currentChild_a[ ${globalMacro(x)} ] ;" )
+                            val defaultChild = startChild( x ) 
+                            out.switchComm(true, "current") {
+                                for child <- x.children.filter( _.isState ) do
+                                    out.caseComm( localMacro(child)) {
+                                            out.put( s"${exitFunctionName(child)}( -1 ) ; ")
+                                    }
+                                    out.endLine
+                            }
+                        }
+                        out.endLine
+                    case x @ Node.AndState( _, _ ) =>
+                        // When an AND state is exited, all of its children will should first
+                        // be exited. If the transition's source is a strict descendant, then
+                        // the region that that source is in should already have been exited.
+                        // So here we exit all the others
+                        for child <- x.children.filter( _.isState ) do
+                            out.ifComm( s"childIndex != ${localMacro(state)} ") {
+                                out.put( s"${exitFunctionName(state)}( -1 ) ; ")
+                            }
+                            out.endLine ;
+
+                    case _ => assert( false )  
+
+                // Exit actions go here
+
+                out.put( s"$isInArrayName[ ${globalMacro(state)} ] = false ;" )
+                out.endLine
+            }
+    } 
 
     def generateDefines( stateChart : StateChart ) : Unit = {
         val stateList = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
@@ -421,6 +525,12 @@ class Backend( val logger : Logger, val out : COutputter ) :
     def needCodeForEvents( state : Node, stateChart : StateChart ) : Boolean = { 
         val edges = stateChart.edges.filter( e => e.source == state )
         return !(edges.isEmpty)
+    }
+
+    def startChild( state : Node.OrState ) : Node = {
+        val opt = state.children.find( _.getLocalIndex == 0)
+        assert( !opt.isEmpty)
+        opt.get
     }
 
     def globalMacro( node : Node ) : String = {

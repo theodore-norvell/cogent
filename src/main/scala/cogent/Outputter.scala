@@ -10,6 +10,11 @@ class Outputter( val writer : PrintWriter ) :
     protected var atStartOfLine = true
     protected var indentation = 0
     
+    def putLine( str : String ) : Unit = {
+        put( str )
+        endLine
+    }
+
     def put( str :  String ) : Unit = {
         if atStartOfLine then
             currentLine.append("    "*indentation)
