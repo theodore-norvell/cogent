@@ -24,20 +24,37 @@ The input is a plant UML spec such as
 @enduml
 ```
 
-From a PlantUML spec, Cogent generates a controller in C that looks like this:
+Running Cogent with command line
+
+```
+   scala cogent-assembly-1.0.jar foo first_example.puml first_example.c
+```
+generates a controller in first_example.c that declares the following procedures.
 
 ```C
-bool dispatchEvent( const event_t *pev ){
+void initStateMachine_foo( ) 
+{
+    ...
+}
+bool_t dispatchEvent_foo( event_t *event_p ) {
+{
     ...
 }
 ```
 
-As events happen they should be fed into the controller and it will react by changing its own state and taking actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
+where `foo` is the name of the statemachine, obtained from the command line.
 
-The `dispatchEvent` subroutine has many prerequisites which need to be supplied. You need to define
+This C file can be included into another C file that defines certain prerequisite types, constants, and procedures, discussed below.
 
+As events happen they should be fed into the generated controller and it will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
+
+## Prerequisites
+
+The generated code has some prerequisites which need to be supplied. You need to define
+
+* A type `bool_t` and constants `true` and `false`
 * The `event_t` type.
-* A function (or a function-like macro) `eventClassOf(event_p)` which produces an member of an enum type.
+* A function (or a function-like macro) `eventClassOf(event_t*)` which produces an member of an enum type.
 * The members of that type correspond to the triggers in the diagram: In the example above there
 should be members `go` and `kill`. There should also be a member called `TICK`. For example, this would do
 
@@ -51,24 +68,23 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
     #define OK_STATUS ((int16_t)0)
     #define OK( s ) ( (s)==OK_STATUS )
 ```
-
-* For each action, there needs to be a function of type `status_t (const event_p *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is none. For the example above, we would need to supply functions
+* For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is none. For the example above, we would need to supply functions
 
 ```C
-    status_t start(const event_p *, status_t status) {
+    status_t start(const event_t *, status_t status) {
         ...
     }
-    status_t stop(const event_p *, status_t status) {
+    status_t stop(const event_t *, status_t status) {
         ...
     }
 ```
 
 In this particular example, the input status in both cases will be `OK_STATUS`, since `start` and `stop` are the first actions on their compound transitions. In both cases, the output status is ignored since `start` and `stop` are also the last actions on their transitions, and there are no subsequent guards that depend on the status.
 
-* For each guard, there needs to be a function of type `bool (const event_p *, status_t)`.  For the example above, we would need
+* For each guard, there needs to be a function of type `bool (const event_t *, status_t)`.  For the example above, we would need
 
 ```C
-    bool READY(const event_p *, status_t) {
+    bool READY(const event_t *, status_t) {
         ...
     }
 ```
@@ -77,16 +93,21 @@ In this particular example, the input status in both cases will be `OK_STATUS`, 
 * A macro or function "void assertThat( bool )".  This should do nothing if the argument is true. What it does if the argument is false is up to you
 * A macro or function "void assertUnreachable()".  What this does is up to you.
 
+
+[In the future, Cogent will have defaults
+for all the prerequisites and will
+declare the guard and action methods.]
+
 ## TICK events
 
 TICK events are used to trigger transitions labelled "after( D )" where D is a duration in seconds or milliseconds.  My advice is after every event that makes the controller return true, feed the controller a sequence of TICK events until it returns false.
 
 ```C
      /* Do this shortly after an event happens. */
-     bool handled = dispatchEvent( &event ) ;
+     bool handled = dispatchEvent_foo( &event ) ;
      int count = 0 ;
      while( handled && count < MAX ) {
-         handled = dispatchEvent( &tick ) ;
+         handled = dispatchEvent_foo( &tick ) ;
          count += 1 ;
      }
 ```
@@ -95,10 +116,10 @@ And you should periodically send the controller a sequence of tick events fairly
 
 ```C
      /* Do this fairly frequently. */
-     bool handled = dispatchEvent( &tick ) ;
+     bool handled = dispatchEvent_foo( &tick ) ;
      int count = 0 ;
      while( handled && count < MAX ) {
-         handled = dispatchEvent( &tick ) ;
+         handled = dispatchEvent_foo( &tick ) ;
          count += 1 ;
      }
 ```
@@ -111,19 +132,19 @@ If there is a queue of events, then the following code could be executed periodi
     bool success = takeFromQueue( & event ) ;
     if( success ) {
         do {
-            bool handled = dispatchEvent( event ) ;
+            bool handled = dispatchEvent_foo( event ) ;
             int count = 0 ;
             while( handled && count < MAX ) {
-                handled = dispatchEvent( &tick ) ;
+                handled = dispatchEvent_foo( &tick ) ;
                 count += 1 ;
             }
             success = takeFromQueue( & event ) ;
         } while( success ) ;
     } else {
-        bool handled = dispatchEvent( &tick ) ;
+        bool handled = dispatchEvent_foo( &tick ) ;
         int count = 0 ;
         while( handled && count < MAX ) {
-            handled = dispatchEvent( &tick ) ;
+            handled = dispatchEvent_foo( &tick ) ;
             count += 1 ;
         }
     }
