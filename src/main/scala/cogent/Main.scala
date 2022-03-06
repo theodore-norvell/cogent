@@ -9,46 +9,60 @@ import scala.jdk.CollectionConverters._
 
 import Logger.Level._
 
-@main def main : Unit =
-    val logger = new LogToStdError( Logger.Level.Info )
-    val f : File = new File("foo.puml")
-    if ! f.exists() then
-        logger.log( Fatal, s"File ${f} does not exist.")
-        return ()
+object Main :
+    def main( args : Array[String] ) : Unit =
+        val logger = new LogToStdError( Logger.Level.Info )
+        println( s"args.length is ${args.length}")
+        for i <- 0 until args.length do
+            println( s"args($i) is ${args(i)}")
+        val chartName : String = if( args != null && args.length > 1 ) args(1) else "foo"
+        val inFileName : String = if args != null && args.length > 2 then args(2) else chartName + ".puml"
+        var outFileName : String = if args != null && args.length > 3 then args(3) else chartName + ".c"
+        val f : File = new File( inFileName )
+        if ! f.exists() then
+            logger.log( Fatal, s"File ${f} does not exist.")
+            return ()
 
-    val sfr : SourceFileReader = 
-        try
-            new SourceFileReader( f )
-        catch (e : Throwable) =>
-                logger.log( Fatal, s"Exception making SourceFileReader ${e.getMessage()} ${e}" )
-                return ()
-    var blockList : java.util.List[BlockUml] =
-        try
-            sfr.getBlocks()
-        catch 
-            case (e : IOException) =>
-                logger.log( Fatal, s"IOException getting blocklist ${e.getMessage()} ${e}" )
-                return ()
-            case (e : Throwable) =>
-                logger.log( Fatal, s"Exception getting blocklist ${e.getMessage()} ${e}" )
-                return ()
-    
-    val blocks = blockList.asScala
-    val middleEnd = MiddleEnd( logger ) 
-    val stateChartList = middleEnd.processBlocks( blocks )
-    if ! logger.hasFatality then
-        if stateChartList.size == 0 then
-            logger.log( Fatal, "No statecharts to process")
-        else if stateChartList.size > 1 then
-            logger.log( Fatal, "Sorry, only one statechart can be handled right now." )
-        else
-            val stateChart = stateChartList.head
-            val checker = Checker( logger )
-            checker.check( stateChart )
-            if ! logger.hasFatality then
-                logger.log( Info, "Ready for code generation" )
-                import java.io.PrintWriter
-                val cout = COutputter( new PrintWriter( Console.out) )
-                val backend = Backend( logger, cout )
-                backend.generateCCode( stateChart ) 
-end main
+        val sfr : SourceFileReader = 
+            try
+                new SourceFileReader( f )
+            catch (e : Throwable) =>
+                    logger.log( Fatal, s"Exception making SourceFileReader ${e.getMessage()} ${e}" )
+                    return ()
+
+        // Step 0. Parse
+        var blockList : java.util.List[BlockUml] =
+            try
+                sfr.getBlocks()
+            catch 
+                case (e : IOException) =>
+                    logger.log( Fatal, s"IOException getting blocklist ${e.getMessage()} ${e}" )
+                    return ()
+                case (e : Throwable) =>
+                    logger.log( Fatal, s"Exception getting blocklist ${e.getMessage()} ${e}" )
+                    return ()
+        
+        // Step 1: Create a list of StateChart objects
+        val blocks = blockList.asScala
+        val middleEnd = MiddleEnd( logger ) 
+        val stateChartList = middleEnd.processBlocks( blocks )
+        if ! logger.hasFatality then
+            if stateChartList.size == 0 then
+                logger.log( Fatal, "No statecharts to process")
+            else if stateChartList.size > 1 then
+                logger.log( Fatal, "Sorry, only one statechart can be handled right now." )
+            else
+                // Step 2: Check that the StateChart is well formed.
+                val stateChart = stateChartList.head
+                val checker = Checker( logger )
+                checker.check( stateChart )
+                if ! logger.hasFatality then
+                    // Step 3: Convert to a C file
+                    logger.log( Info, "Ready for code generation" )
+                    val outFile = new File( outFileName )
+                    import java.io.PrintWriter
+                    val cout = COutputter( new PrintWriter( outFile ) )
+                    val backend = Backend( logger, cout )
+                    backend.generateCCode( stateChart, chartName ) 
+    end main
+end Main

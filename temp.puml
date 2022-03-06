@@ -4,7 +4,7 @@
         [*] -> C
         state C
         state D
-        C -> D: a [g] / w
+        C -> D: a \n [g and OK and not in F] \n / w
         C -> D: a [h] / x
         D -> C : a [g] / w
         D -> C : a [h] / x
@@ -36,9 +36,15 @@
                 state W31
                 state W32
             }
-            WC -> W1 : [A] / q
+            WC -> W1 : [A || OK || {status==12}] / q
             WC -> W32 : [B] / r
         }
+        --
+        note "Z" as Z
+        [*] -> X
+        state X
+        state Y
+        X -> Y: after( 3s ) \n [g and not in F] \n / w
     }
     state A
 @enduml
