@@ -5,6 +5,14 @@ class Checker( val logger : Logger ) :
     import scala.collection.mutable
     import Logger.Level._
 
+    private val keyWordsOfC : scala.collection.immutable.HashSet[String] 
+    = scala.collection.immutable.HashSet[String](
+        "auto", "break", "case", "char", "const", "continue", "default", 
+        "do", "double", "else", "enum", "extern", "float", "for", 
+        "goto", "if", "int", "long", "register", "return", "short", 
+        "signed", "sizeof", "static", "struct", "switch", "typedef", "union", 
+        "unsigned", "void", "volatile", "while" )
+
     def check( stateChart : StateChart ) : Unit =
         childrenOfANDsAreORs( stateChart )
         checkValidCNamesForStatesAndChoices( stateChart )
@@ -20,6 +28,9 @@ class Checker( val logger : Logger ) :
         //     (i) Each bundle with size greater than one should have
         //         a guard on every edge.
         //     (ii) At most one edge in each bundle is labelled with "else".
+        // (b) There are no duplicate node names.  (Need to check the actual names, not the C names.)
+        // (c) That named triggers, guards, and actions are all valid C names.
+        //     and not C keywords.
     end check
 
     def childrenOfANDsAreORs(  stateChart : StateChart ) : Unit = {
@@ -38,13 +49,19 @@ class Checker( val logger : Logger ) :
         for node <- stateChart.nodes do
             if node.isState || node.isChoicePseudostate then 
                 val name = node.getCName 
-                if ! regEx.matches(name) then
+                //println(s"Checking isValidCIdentifier( $name ) is ${isValidCIdentifier( name )}")
+                if ! isValidCIdentifier( name ) then
                     logger.log( Fatal, s"State or choice named $name is not a valid C identifier.")
                 end if
             end if
         end for
-        // TODO check for C keywords.  And do the same for actions and guards.
+        // TODO And do the same for actions and guards.
     }
+    
+    private val cIdentRX =  """[a-zA-Z_][a-zA-Z_0-9]*""".r
+    
+    def isValidCIdentifier(name : String) : Boolean =
+        cIdentRX.matches( name ) && ! (keyWordsOfC contains name)
 
     def checkNoLabelsOnStartEdges(  stateChart : StateChart ) : Unit = {
         val edgesFromStart = stateChart.edges.filter( e => e.source.isStartMarker )
