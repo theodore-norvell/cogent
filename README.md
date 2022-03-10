@@ -81,22 +81,22 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
 
 In this particular example, the input status in both cases will be `OK_STATUS`, since `start` and `stop` are the first actions on their compound transitions. In both cases, the output status is ignored since `start` and `stop` are also the last actions on their transitions, and there are no subsequent guards that depend on the status.
 
-* For each guard, there needs to be a function of type `bool (const event_t *, status_t)`.  For the example above, we would need
+* For each guard, there needs to be a function of type `bool_t (const event_t *, status_t)`.  For the example above, we would need
 
 ```C
-    bool READY(const event_t *, status_t) {
+    bool_t READY(const event_t *, status_t) {
         ...
     }
 ```
 
 * Some functions similar to the FreeRTOS functions `xTaskGetTickCount`, `vTaskDelay`, and `pdMS_TO_TICKS` and a type similar to FreeRTOS's `TickType_t`. If using FreeRTOS, just include the appropriate header files.
-* A macro or function "void assertThat( bool )".  This should do nothing if the argument is true. What it does if the argument is false is up to you
+* A macro or function "void assertThat( bool_t )".  This should do nothing if the argument is true. What it does if the argument is false is up to you
 * A macro or function "void assertUnreachable()".  What this does is up to you.
 
 
 [In the future, Cogent will have defaults
-for all the prerequisites and will
-declare the guard and action methods.]
+for all the prerequisites 
+except for the guard and action methods.]
 
 ## TICK events
 
@@ -104,7 +104,7 @@ TICK events are used to trigger transitions labelled "after( D )" where D is a d
 
 ```C
      /* Do this shortly after an event happens. */
-     bool handled = dispatchEvent_foo( &event ) ;
+     bool_t handled = dispatchEvent_foo( &event ) ;
      int count = 0 ;
      while( handled && count < MAX ) {
          handled = dispatchEvent_foo( &tick ) ;
@@ -116,7 +116,7 @@ And you should periodically send the controller a sequence of tick events fairly
 
 ```C
      /* Do this fairly frequently. */
-     bool handled = dispatchEvent_foo( &tick ) ;
+     bool_t handled = dispatchEvent_foo( &tick ) ;
      int count = 0 ;
      while( handled && count < MAX ) {
          handled = dispatchEvent_foo( &tick ) ;
@@ -128,11 +128,11 @@ If there is a queue of events, then the following code could be executed periodi
 
 ```C
     event_t event ;
-    bool timedOut ;
-    bool success = takeFromQueue( & event ) ;
+    bool_t timedOut ;
+    bool_t success = takeFromQueue( & event ) ;
     if( success ) {
         do {
-            bool handled = dispatchEvent_foo( event ) ;
+            bool_t handled = dispatchEvent_foo( event ) ;
             int count = 0 ;
             while( handled && count < MAX ) {
                 handled = dispatchEvent_foo( &tick ) ;
@@ -141,7 +141,7 @@ If there is a queue of events, then the following code could be executed periodi
             success = takeFromQueue( & event ) ;
         } while( success ) ;
     } else {
-        bool handled = dispatchEvent_foo( &tick ) ;
+        bool_t handled = dispatchEvent_foo( &tick ) ;
         int count = 0 ;
         while( handled && count < MAX ) {
             handled = dispatchEvent_foo( &tick ) ;
@@ -429,7 +429,7 @@ Transitions come in three flavours
 
 * Strawberry: From a initial pseudo state to a state with the same parent.
 * Vanilla: From a state (simple or composite) to another state or to a choice pseudostate.
-* Chocolate: From a choice psuedostate to another choice psuedostate.
+* Chocolate: From a choice psuedostate to a state or to another choice psuedostate.
 
 Strawberry transitions should not be labelled.
 
@@ -453,7 +453,7 @@ A vanilla transition is enabled if its source state is active and:
 * it has a guard that is true, or
 * it has an else guard and all the competing guards are false.
 
-When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example if there are guards A, B. The generated code might look like this
+When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example if there are guards A, B. The generated code for that state/event pair might look like this:
 
 ```C
    status_t status = OK_STATUS ;
@@ -477,7 +477,7 @@ For the set of all edges leaving a given state that are all labelled with the sa
 
 Once a vanilla transition is traversed, the machine is committed, there is no turning back. If it reaches a choice state where no guard is true, the dispatcher will call `assertUnreachable()`.
 
-E.g. if the only two transitions out of a choice pseudostate are guarded by A and B the generated code could be
+E.g. if the only two transitions out of a choice pseudostate are guarded by A and B the generated code for that choice pseudostate could be
 
 ```C
    if( A(event_p, status) ) { <<Do transition guarded by A>> }
@@ -493,7 +493,7 @@ or
    else { assertUnreachable() ; }
 ```
 
-Note that if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.
+Note that, if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.
 
 For the set of all transitions leaving a given choice pseudo state:
 
@@ -519,7 +519,7 @@ B --> D : [else] / n
 @enduml
 ```
 
-Here the input status of `f` will be `OK_STATUS` and the output status of `f` will be the input status of `g`. Then the output status of `g` is used to make the decision and then it is input to `h`, `m`, or `n`.  The C code might look like this
+Here the input status of `f` will be `OK_STATUS` and the output status of `f` will be the input status of `g`. Then the output status of `g` is used to make the decision and then it is input to `h`, `m`, or `n`.  The code for state `A` on event `a` might look like this
 
 ```C
 
