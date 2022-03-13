@@ -441,8 +441,11 @@ class MiddleEnd(val logger : Logger) :
         logger.log( Debug, "AddingMissingTriggers")
         val newEdges = mutable.Set[Edge]()
         for edge <- stateChart.edges do
+            logger.debug( s"Processing edge $edge")
             edge match 
                 case Edge( source, target, triggerOpt, guardOpt, actions ) =>
+                    logger.debug( s"triggerOpt.isEmpty is ${triggerOpt.isEmpty}")
+                    logger.debug( s"source.isState is ${source.isState}")
                     if triggerOpt.isEmpty && source.isState then
                         val newEdge = Edge( source, target, Some(Trigger.AfterTrigger(0)), guardOpt, actions )
                         newEdges += newEdge

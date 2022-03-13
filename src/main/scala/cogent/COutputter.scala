@@ -53,6 +53,9 @@ class COutputter( override val writer : PrintWriter ) extends Outputter( writer 
         block( contents, false )
     }
 
+    def elseStart : Unit = {
+        put( "else " )
+    }
     def ifComm( expr : => Unit  )( contents : => Unit ) : Unit = {
         put( "if( " ) ; expr ; put( s" )" )
         block( contents, false )

@@ -32,17 +32,17 @@ Running Cogent with command line
 generates a controller in first_example.c that declares the following procedures.
 
 ```C
-void initStateMachine_foo( ) 
+void initStateMachine_foo( TIME_T now ) 
 {
     ...
 }
-bool_t dispatchEvent_foo( event_t *event_p ) {
+bool_t dispatchEvent_foo( event_t *event_p, TIME_T now ) {
 {
     ...
 }
 ```
 
-where `foo` is the name of the statemachine, obtained from the command line.
+where `foo` is the name of the statechart, obtained from the command line.
 
 This C file can be included into another C file that defines certain prerequisite types, constants, and procedures, discussed below.
 
@@ -89,13 +89,18 @@ In this particular example, the input status in both cases will be `OK_STATUS`, 
     }
 ```
 
-* Some functions similar to the FreeRTOS functions `xTaskGetTickCount`, `vTaskDelay`, and `pdMS_TO_TICKS` and a type similar to FreeRTOS's `TickType_t`. If using FreeRTOS, just include the appropriate header files.
-* A macro or function "void assertThat( bool_t )".  This should do nothing if the argument is true. What it does if the argument is false is up to you
+* A macro `TIME_T` and a macro `IS_AFTER(d, t0, t1)` that gives a boolean result. The inputs to the macro are
+    
+    * d -- a duration in milliseconds of type `unsigned int`. 
+    * t0 -- a time of type `TIME_T`
+    * t1 -- a time of type `TIME_T`
+
+  The default for `TIME_T` is `unsigned int` and the default for the `IS_AFTER` macro is `((d) >= (unsigned)(t1)-(unsigned)(t0))`. This works if `TIME_T` measures time in milliseconds.  If time were measured in units of `m/n` milliseconds, then this should be modified to `(n*(d) >= m*((unsigned)(t1)-(unsigned)(t0)))`. A consequence of these defaults is that, even if the time wraps around to 0, the `IS_AFTER` macro will continue to give good results, as `d` is not insanely big.
+* A macro or function "void assertThat( bool_t )".  This should do nothing if the argument is true. What it does if the argument is false is up to you.
 * A macro or function "void assertUnreachable()".  What this does is up to you.
 
 
-[In the future, Cogent will have defaults
-for all the prerequisites 
+[In the future, Cogent will have defaults for all the prerequisites 
 except for the guard and action methods.]
 
 ## TICK events
@@ -104,10 +109,10 @@ TICK events are used to trigger transitions labelled "after( D )" where D is a d
 
 ```C
      /* Do this shortly after an event happens. */
-     bool_t handled = dispatchEvent_foo( &event ) ;
+     bool_t handled = dispatchEvent_foo( &event , now) ;
      int count = 0 ;
      while( handled && count < MAX ) {
-         handled = dispatchEvent_foo( &tick ) ;
+         handled = dispatchEvent_foo( &tick, now ) ;
          count += 1 ;
      }
 ```
@@ -116,35 +121,36 @@ And you should periodically send the controller a sequence of tick events fairly
 
 ```C
      /* Do this fairly frequently. */
-     bool_t handled = dispatchEvent_foo( &tick ) ;
+     bool_t handled = dispatchEvent_foo( &tick, now ) ;
      int count = 0 ;
      while( handled && count < MAX ) {
-         handled = dispatchEvent_foo( &tick ) ;
+         handled = dispatchEvent_foo( &tick, now ) ;
          count += 1 ;
      }
 ```
 
-If there is a queue of events, then the following code could be executed periodically
+To accomplish both these above, if there is a queue of events,
+then the following code could be executed periodically
 
 ```C
+    time_t now = getTime() ;
     event_t event ;
-    bool_t timedOut ;
     bool_t success = takeFromQueue( & event ) ;
     if( success ) {
         do {
-            bool_t handled = dispatchEvent_foo( event ) ;
+            bool_t handled = dispatchEvent_foo( event, now ) ;
             int count = 0 ;
             while( handled && count < MAX ) {
-                handled = dispatchEvent_foo( &tick ) ;
+                handled = dispatchEvent_foo( &tick, now ) ;
                 count += 1 ;
             }
             success = takeFromQueue( & event ) ;
         } while( success ) ;
     } else {
-        bool_t handled = dispatchEvent_foo( &tick ) ;
+        bool_t handled = dispatchEvent_foo( &tick, now ) ;
         int count = 0 ;
         while( handled && count < MAX ) {
-            handled = dispatchEvent_foo( &tick ) ;
+            handled = dispatchEvent_foo( &tick, now ) ;
             count += 1 ;
         }
     }
@@ -386,7 +392,16 @@ Newlines ("\n") are treated as spaces.
 Triggers can be:
 
 * Named triggers: Just a name. These correspond to event classes.
-* After triggers: after( D ) where D is a duration. Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)". The maximum duration depends on your implementation of the time functions and `TickType_t` and is not checked by cogent.
+* After triggers: after( D ) where D is a duration.
+
+    * Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)".
+    * The maximum duration depends on your implementation of the `TIME_T` and `IS_AFTER` macros and is not checked by cogent.
+    * A state can have multiple exiting edges with 'after' triggers; these guards are checked from shortest duration to longest.
+    * Transition labelled with 'after' triggers only first on `TICK` events.
+
+* If there is no trigger on an edge leaving a state, it is considered equivalent to `after(0s)`, meaning it's transition can be triggered by any `TICK` event. 
+
+Edges leaving choice nodes must not have a trigger.
 
 #### Guards
 
@@ -406,6 +421,14 @@ Basic guards are
 The boolean operators follow the usual rules of precedence (not, then and, then or, then implies) and are right associative.
 
 All keywords (else, not, and, or, implies, OK, in) are case sensitive.
+
+For any given vertex / trigger combination, the guards on the edges have the following restrictions.
+
+* If a transition out of a state has no guard, then it should be the only edge for that trigger.
+* At most one transition may be labelled with an `[else]` guard.
+* If the vertex is a choice pseudostate and there is no else, then at least one guard must be true. This is not checked until runtime.
+* On the other and, if a state has no else and all guards are false, it is not an error, but it will result in the trigger being ignored.
+
 
 #### Action sequences
 
@@ -453,7 +476,7 @@ A vanilla transition is enabled if its source state is active and:
 * it has a guard that is true, or
 * it has an else guard and all the competing guards are false.
 
-When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example if there are guards A, B. The generated code for that state/event pair might look like this:
+When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example, if there are guards A, B. The generated code for that state/event pair might look like this:
 
 ```C
    status_t status = OK_STATUS ;
@@ -493,7 +516,7 @@ or
    else { assertUnreachable() ; }
 ```
 
-Note that, if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.
+Note that, if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.  This is because it will have left at least one state, but will not have entered another.
 
 For the set of all transitions leaving a given choice pseudo state:
 
@@ -622,8 +645,7 @@ state M {
 
 Cogent currently considers all vanilla and chocolate transitions to be external. That is that they exit their source and they enter their destination, even if PlantUML draws the diagram "wrong", as in the previous image.
 
-[There should really be a warning when 
-the diagram could be drawn either way.]
+[There should really be a warning when the diagram could be drawn either way.]
 
 [Note that this aspect of cogent may change in the future.]
 
