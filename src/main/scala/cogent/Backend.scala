@@ -359,14 +359,18 @@ class Backend( val logger : Logger, val out : COutputter ) :
         if intDuration.asInstanceOf[Double] != durationInMilliseconds then
             logger.warning( s"Duration $durationInMilliseconds ms rounded to $intDuration ms" )
 
+        out.comment( s"Code for after( $durationInMilliseconds ms )" )
+        out.endLine
         out.ifComm { 
             out.put(s"   ! ${handledArrayName}[${globalMacro(state)}]")
-            out.endLine
-            out.put(s"    && $isAfter( ${intDuration}u, $timeEnteredArrayName[ ${globalMacro(state)} ], $now )")
+            if( intDuration > 0 )
+                out.endLine
+                out.put(s"    && $isAfter( ${intDuration}u, $timeEnteredArrayName[ ${globalMacro(state)} ], $now )")
         }{
             val triggerNameForMessages = Some(s"after $intDuration ms")
             generateIfsForEdges( triggerNameForMessages, state, edges, stateChart ) ;
         }
+        out.endLine
     }
 
     def generateIfsForEdges( triggerDescriptionOpt : Option[String], node : Node, edges : Set[Edge], stateChart : StateChart) : Unit = {
