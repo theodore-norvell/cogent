@@ -20,6 +20,11 @@ enum Trigger :
     case AfterTrigger( durationInMilliseconds : Double )
     case NamedTrigger( name : String )
 
+    def asAfterTrigger : Option[AfterTrigger] =
+        this match
+            case x@AfterTrigger( _ ) => Some(x)
+            case NamedTrigger( _ ) => None
+
     def asNamedTrigger : Option[NamedTrigger] =
         this match
             case AfterTrigger( _ ) => None

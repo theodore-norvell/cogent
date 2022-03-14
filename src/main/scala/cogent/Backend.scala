@@ -4,38 +4,40 @@ class Backend( val logger : Logger, val out : COutputter ) :
     private val isInArrayName = "isIn_a"
     private val currentChildArrayName = "currentChild_a"
     private val handledArrayName = "handled_a"
+    private val timeEnteredArrayName = "timeEntered_a"
     private val eventPointerName = "event_p"
     private val statusVarName = "status"
     private val okStatusConstant = "OK_STATUS"
     private val localIndexType = "LOCAL_INDEX_T"
+    private val timeType = "TIME_T"
+    private val isAfter = "IS_AFTER"
+    private val now = "now"
 
     def generateCCode( stateChart : StateChart, chartName : String ) : Unit = {
         val root = stateChart.root
 
-        out.putLine( s"#ifndef $localIndexType" )
-        out.putLine( s"#define $localIndexType int" )
-        out.putLine( "#endif")
-        out.blankLine
+        generateMacroDeclarations()
 
         generateDefines( stateChart )
 
         generateEnterAndExitDecls( stateChart )
         
         out.blankLine
-        out.put( "// This array maps the global index of each OR state to the local index of its currently active state" )
-        out.endLine
-        out.put( s"static $localIndexType ${currentChildArrayName}[ OR_STATE_COUNT ] ;" )
-        out.endLine
-        out.put( s"static bool_t $isInArrayName[ STATE_COUNT ] ;" )
+        out.putLine( "// This array maps the global index of each OR state to the local index of its currently active state" )
+        out.putLine( s"static $localIndexType ${currentChildArrayName}[ OR_STATE_COUNT ] ;" )
+        out.putLine( "// This array maps keeps track of which states are active" ) 
+        out.putLine( s"static bool_t $isInArrayName[ STATE_COUNT ] ;" )
+        out.putLine( "// This array maps keeps track the time at which each active state was entered" ) 
+        out.putLine( s"static $timeType $timeEnteredArrayName[ STATE_COUNT ] ;" )
         out.blankLine
         
-        out.put( s"void initStateMachine_${chartName}( ) " )
+        out.put( s"void initStateMachine_${chartName}( $timeType $now) " )
         out.block {
-            out.putLine( s"${enterFunctionName(stateChart.root)}( -1 ) ;" )
+            out.putLine( s"${enterFunctionName(stateChart.root)}( -1, $now ) ;" )
         }
 
         out.blankLine 
-        out.put( s"bool_t dispatchEvent_${chartName}( event_t *${eventPointerName} ) " )
+        out.put( s"bool_t dispatchEvent_${chartName}( event_t *${eventPointerName}, $timeType $now ) " )
         out.block{
             out.put( s"bool_t ${handledArrayName}[ STATE_COUNT ] = {false};" )
             out.endLine
@@ -48,10 +50,23 @@ class Backend( val logger : Logger, val out : COutputter ) :
         
     }
 
+    def generateMacroDeclarations() : Unit = {
+
+        def declMacro( name : String, params : String, definition : String ) : Unit =
+            out.putLine( s"#ifndef $name" )
+            out.putLine( s"#define $name$params $definition" )
+            out.putLine( "#endif")
+            out.blankLine
+
+        declMacro( localIndexType, "", "int" )
+        declMacro( timeType, "", "unsigned int")
+        declMacro( isAfter, "(d, t0, t1)", "((d) >= (unsigned)(t1)-(unsigned)(t0))")
+    }
+
     def generateEnterAndExitDecls( stateChart : StateChart ) : Unit = {
         val states = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
         for state <- states do
-            out.put( s"static void ${enterFunctionName(state)} ( $localIndexType ) ; "  )
+            out.put( s"static void ${enterFunctionName(state)} ( $localIndexType, $timeType ) ; "  )
             out.put( s"static void ${exitFunctionName(state)} ( $localIndexType ) ;" )
             out.endLine
     } 
@@ -61,11 +76,11 @@ class Backend( val logger : Logger, val out : COutputter ) :
         for state <- states do
             out.blankLine
             // Generate the enter routine for the the state.
-            out.put( s"static void ${enterFunctionName(state)} ( $localIndexType childIndex ) "  )
+            out.put( s"static void ${enterFunctionName(state)} ( $localIndexType childIndex, $timeType $now ) "  )
             out.block{
                 out.endLine
-                out.put( s"$isInArrayName[ ${globalMacro(state)} ] = true ;" )
-                out.endLine
+                out.putLine( s"$isInArrayName[ ${globalMacro(state)} ] = true ;" ) 
+                out.putLine( s"$timeEnteredArrayName[ ${globalMacro(state)} ] = $now ;" )
 
                 // Entry actions go here.
 
@@ -78,7 +93,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                         // do anything special. Otherwise, we need to  enter the default child.
                         // The default child should be first in the list of children
                         val defaultChild = startChild(x)
-                        out.ifComm( " childIndex == -1 "){ out.put( s"${enterFunctionName( defaultChild )}( -1 ) ;") }
+                        out.ifComm( " childIndex == -1 "){ out.put( s"${enterFunctionName( defaultChild )}( -1, $now ) ;") }
                         out.endLine
                     case x @ Node.AndState( _, _ ) =>
                         // When an AND state is entered, all of its children will also be entered.
@@ -86,7 +101,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                         // being entered so we don't need to enter than child.
                         for child <- x.children.filter( _.isState ) do
                             out.ifComm( s"childIndex != ${localMacro(child)} ") {
-                                    out.put( s"${enterFunctionName(child)}( -1 ) ; ")
+                                    out.put( s"${enterFunctionName(child)}( -1, $now ) ; ")
                             }
                             out.endLine ;
 
@@ -286,13 +301,22 @@ class Backend( val logger : Logger, val out : COutputter ) :
         val edges = stateChart.edges.filter( e => e.source == state )
         // Now all named triggers
         val namedTriggers = edges.map(e => e.triggerOpt.flatMap( _.asNamedTrigger )).flatten
-        if namedTriggers.size > 0 then
+        val afterTriggers = edges.map(e => e.triggerOpt.flatMap( _.asAfterTrigger )).flatten
+        //println( s"State is ${state.getFullName} edges is $edges")
+        //println( s"namedTriggers is $namedTriggers")
+        //println( s"afterTriggers is $afterTriggers")
+        if namedTriggers.size > 0 || afterTriggers.size > 0 then
             out.switchComm( false, s"eventClassOf(${eventPointerName})" ) {
                 for Trigger.NamedTrigger( name ) <- namedTriggers do
                     generateCaseForEvent( name, state, stateChart )
                 end for
-                out.comment( "TODO code for tick events if any" )
-                out.endLine
+
+                if afterTriggers.size > 0 then 
+                    val durationList = afterTriggers.toSeq.map( tr => tr.asAfterTrigger.get.durationInMilliseconds )
+                    out.caseComm( "TICK" ) {
+                        generateIfsForDurationList( durationList, state, stateChart )
+                    }
+                end if
             }
         end if
     }
@@ -308,45 +332,91 @@ class Backend( val logger : Logger, val out : COutputter ) :
                             }).getOrElse( false ) ) ;
         
         out.caseComm( name ){
-            generateIfsForEdges( name, state, edges, stateChart ) ;
+            generateIfsForEdges( Some(name), state, edges, stateChart ) ;
         }
     }
 
-    def generateIfsForEdges( name : String, node : Node, edges : Set[Edge], stateChart : StateChart) : Unit = {
+    def generateIfsForDurationList( durationList: Seq[Double], state : Node, stateChart : StateChart ) : Unit = {
+        val sortedDurationList = durationList.sorted
+        for durationInMilliseconds <- sortedDurationList do
+            // Gather all edges that exit the state and have t
+            // as the trigger
+            generateIfForDuration( durationInMilliseconds, state, stateChart )
+    }
+
+    def generateIfForDuration( durationInMilliseconds : Double, state : Node, stateChart : StateChart ) : Unit = {
+        // Collect all edges with this duration.
+        val edges = stateChart.edges.filter(
+                        e =>   e.source == state
+                            && e.triggerOpt.map( t => t match {
+                                case Trigger.AfterTrigger(d) =>
+                                    d == durationInMilliseconds
+                                case _ =>
+                                    false
+                                }).getOrElse( false ) ) ;
+        val intDuration : Int = durationInMilliseconds.asInstanceOf[Int]
+        
+        if intDuration.asInstanceOf[Double] != durationInMilliseconds then
+            logger.warning( s"Duration $durationInMilliseconds ms rounded to $intDuration ms" )
+
+        out.comment( s"Code for after( $durationInMilliseconds ms )" )
+        out.endLine
+        out.ifComm { 
+            out.put(s"   ! ${handledArrayName}[${globalMacro(state)}]")
+            if( intDuration > 0 )
+                out.endLine
+                out.put(s"    && $isAfter( ${intDuration}u, $timeEnteredArrayName[ ${globalMacro(state)} ], $now )")
+        }{
+            val triggerNameForMessages = Some(s"after $intDuration ms")
+            generateIfsForEdges( triggerNameForMessages, state, edges, stateChart ) ;
+        }
+        out.endLine
+    }
+
+    def generateIfsForEdges( triggerDescriptionOpt : Option[String], node : Node, edges : Set[Edge], stateChart : StateChart) : Unit = {
+        val locationForMessages = ( s"Vertex ${node.getFullName}" + (if( triggerDescriptionOpt.isEmpty ) "" else s" on trigger '${triggerDescriptionOpt.get}'" ))
         assert( node.isState || node.isChoicePseudostate )
         if( node.isState )
             out.put( s"status_t ${statusVarName} = ${okStatusConstant} ;") ; out.endLine
         val elseGuardedEdges = edges.filter( e => e.guardOpt.map( g => g match{
                                                     case Guard.ElseGuard() => true
                                                     case _ => false } ).getOrElse( false ) ) ;
-        val nonElseGuardedEdges = (edges -- elseGuardedEdges).toSeq ;
+        val nonElseGuardedEdges = (edges -- elseGuardedEdges)
         val unguardedEdges = nonElseGuardedEdges.filter( e => e.guardOpt.isEmpty )
-        if unguardedEdges.size + elseGuardedEdges.size > 1 then 
+        val conditionalEdges = (nonElseGuardedEdges -- unguardedEdges)
+        assert(elseGuardedEdges.size + unguardedEdges.size + conditionalEdges.size == edges.size)
+        if unguardedEdges.size > 1 then 
             // Case: There too many (more than 1) else-guarded edges, too many unguarded edges, or too many of both.
-            logger.fatal( s"More than one transition out of ${node.getFullName} with trigger $name has no guard or an else guard." )
+            logger.fatal( s"$locationForMessages has more than one transition with no guard." )
         else if unguardedEdges.size == 1 then
-            // Case: There is one guarded edge ...
-            if nonElseGuardedEdges.size > 1 then
+            // Case: There is one unguarded edge ...
+            if edges.size > 1 then
                 // ... but there are also other edges
-                logger.fatal( s"Vertex ${node.getFullName} with trigger $name has both unguarded and guarded transitions" )
+                logger.fatal( s"$locationForMessages has both unguarded and guarded transitions." )
             else
                 // ... and it's the only edge
                 assert( edges.size == 1 )
                 val edge = unguardedEdges.head
-                out.put( s"${handledArrayName}[${globalMacro(node)}] = true ; " ) 
-                out.endLine
+                if node.isState then
+                    out.put( s"${handledArrayName}[${globalMacro(node)}] = true ; " ) 
+                    out.endLine
+                end if
                 generateTransition( edge, stateChart )
-        else 
+        else if elseGuardedEdges.size > 1 then
+            logger.fatal( s"$locationForMessages multiple transitions guarded by 'else'." )
+        else
             // Case there are no unguarded edges and at most 1 else-guarded edges
             assert( unguardedEdges.size == 0 )
             assert( elseGuardedEdges.size < 2 )
+            if conditionalEdges.size == 0 then
+                logger.warning( s"$locationForMessages has only a transition guarded by 'else'; this guard is not needed.")
             // TODO check guards for
             //  Overlap -- there exists a state where 2 or more guards could both be true
             //  Underlap -- there exists a state where all guards are false and there is no else. (This would be info for states and warning for branch nodes)
             //  Pointless else -- in all states at least one guard is true, but there is an else.
 
             // For each edge that is not guarded by an else, output "if(...) {...} else "
-            for edge <- nonElseGuardedEdges do
+            for edge <- conditionalEdges do
                 val guard = edge.guardOpt.head
                 out.ifComm{ generateGuardExpression( guard, stateChart, node ) }{
                     if node.isState then
@@ -365,7 +435,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 }
             else
                 out.block{
-                    logger.warning( s"Vertex ${node.getFullName} has no else guarded transition. If none of the guards are true, the code will crash." )
+                    logger.warning( s"$locationForMessages has no else guarded transition. If none of the guards are true, the code will crash." )
                     out.put( "assertUnreachable() ;" )
                     out.endLine
                  }
@@ -417,12 +487,12 @@ class Backend( val logger : Logger, val out : COutputter ) :
             child = path.tail.head
             // Enter an ancestor of the target.
             // The parameter here means don't also enter this child.
-            out.put( s"${enterFunctionName(p)}( ${localMacro(child)} ) ;" ) ; out.endLine
+            out.put( s"${enterFunctionName(p)}( ${localMacro(child)}, $now ) ;" ) ; out.endLine
             path = path.tail
         if target.isState then
             // Enter the target.
             // The parameter of -1 means enter the child(ren) also.
-            out.put( s"${enterFunctionName(target)}( -1 ) ;" ) ; out.endLine
+            out.put( s"${enterFunctionName(target)}( -1, $now ) ;" ) ; out.endLine
         else
             assert( target.isChoicePseudostate )
             // For choice pseudostate's there is no enter function.
@@ -431,7 +501,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             // been checked for loops that do not go through a state
             // and so this recursive call should terminate.
             val edges = stateChart.edges.filter( e => e.source == target )
-            generateIfsForEdges( "none", target, edges, stateChart )
+            generateIfsForEdges( None, target, edges, stateChart )
     }
 
     def generateGuardExpression( guard : Guard, stateChart : StateChart, sourceNode : Node ) : Unit = {

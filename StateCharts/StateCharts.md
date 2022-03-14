@@ -322,10 +322,10 @@ Wnere a *trigger* is one of
 Of these
 
 * *signal event*. The simplest form of a *signal event* is just a *signalName*, which we've seen a lot of.  I'll look at the other cases below.
-* *time event* is dealt with next.
+rDelayCode* *time event* is dealt with next.
 * *change event*. I'm going to ignore these, since I'm not sure I understand them.
 * *call event*. I'm going to ignore these, since they are mostly useful for describing classes in OO programming.
-* any recieve event*. I'm going to ignore these.
+* *any recieve event*. I'm going to ignore these.
 
 ### Time events.
 
@@ -375,7 +375,7 @@ would be completely useless since the invariant says the guard can not be true. 
 
 ![Invariant](sharedVariablesWithInvariant.png)
 
-## Other features that are not as useful and more difficult, but not impossible, to support.
+## Other features
 
 ### Local and internal transitions.
 

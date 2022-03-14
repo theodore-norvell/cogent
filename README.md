@@ -32,17 +32,17 @@ Running Cogent with command line
 generates a controller in first_example.c that declares the following procedures.
 
 ```C
-void initStateMachine_foo( ) 
+void initStateMachine_foo( TIME_T now ) 
 {
     ...
 }
-bool_t dispatchEvent_foo( event_t *event_p ) {
+bool_t dispatchEvent_foo( event_t *event_p, TIME_T now ) {
 {
     ...
 }
 ```
 
-where `foo` is the name of the statemachine, obtained from the command line.
+where `foo` is the name of the statechart, obtained from the command line.
 
 This C file can be included into another C file that defines certain prerequisite types, constants, and procedures, discussed below.
 
@@ -61,14 +61,16 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
 ```C
     typedef enum EventClass_e {go, kill, TICK} ;
 ```
-* A type named `status_t` along with a constant (or macro) `OK_STATUS` and a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
+* A type named `status_t` along with
+* a constant (or macro) `OK_STATUS` and
+* a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
 
 ```C
     typedef status_t int16_t ;
     #define OK_STATUS ((int16_t)0)
     #define OK( s ) ( (s)==OK_STATUS )
 ```
-* For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is none. For the example above, we would need to supply functions
+* For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply functions
 
 ```C
     status_t start(const event_t *, status_t status) {
@@ -81,22 +83,27 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
 
 In this particular example, the input status in both cases will be `OK_STATUS`, since `start` and `stop` are the first actions on their compound transitions. In both cases, the output status is ignored since `start` and `stop` are also the last actions on their transitions, and there are no subsequent guards that depend on the status.
 
-* For each guard, there needs to be a function of type `bool (const event_t *, status_t)`.  For the example above, we would need
+* For each guard, there needs to be a function of type `bool_t (const event_t *, status_t)`.  For the example above, we would need
 
 ```C
-    bool READY(const event_t *, status_t) {
+    bool_t READY(const event_t *, status_t) {
         ...
     }
 ```
 
-* Some functions similar to the FreeRTOS functions `xTaskGetTickCount`, `vTaskDelay`, and `pdMS_TO_TICKS` and a type similar to FreeRTOS's `TickType_t`. If using FreeRTOS, just include the appropriate header files.
-* A macro or function "void assertThat( bool )".  This should do nothing if the argument is true. What it does if the argument is false is up to you
+* A macro `TIME_T` and a macro `IS_AFTER(d, t0, t1)` that gives a boolean result. The inputs to the macro are
+    
+    * d -- a duration in milliseconds of type `unsigned int`. 
+    * t0 -- a time of type `TIME_T`
+    * t1 -- a time of type `TIME_T`
+
+  The default for `TIME_T` is `unsigned int` and the default for the `IS_AFTER` macro is `((d) >= (unsigned)(t1)-(unsigned)(t0))`. This works if `TIME_T` measures time in milliseconds.  If time were measured in units of `m/n` milliseconds, then this should be modified to `(n*(d) >= m*((unsigned)(t1)-(unsigned)(t0)))`. A consequence of these defaults is that, even if the time wraps around to 0, the `IS_AFTER` macro will continue to give good results, as `d` is not insanely big.
+* A macro or function "void assertThat( bool_t )".  This should do nothing if the argument is true. What it does if the argument is false is up to you.
 * A macro or function "void assertUnreachable()".  What this does is up to you.
 
 
-[In the future, Cogent will have defaults
-for all the prerequisites and will
-declare the guard and action methods.]
+[In the future, Cogent will have defaults for all the prerequisites 
+except for the guard and action methods.]
 
 ## TICK events
 
@@ -104,10 +111,10 @@ TICK events are used to trigger transitions labelled "after( D )" where D is a d
 
 ```C
      /* Do this shortly after an event happens. */
-     bool handled = dispatchEvent_foo( &event ) ;
+     bool_t handled = dispatchEvent_foo( &event , now) ;
      int count = 0 ;
      while( handled && count < MAX ) {
-         handled = dispatchEvent_foo( &tick ) ;
+         handled = dispatchEvent_foo( &tick, now ) ;
          count += 1 ;
      }
 ```
@@ -116,35 +123,36 @@ And you should periodically send the controller a sequence of tick events fairly
 
 ```C
      /* Do this fairly frequently. */
-     bool handled = dispatchEvent_foo( &tick ) ;
+     bool_t handled = dispatchEvent_foo( &tick, now ) ;
      int count = 0 ;
      while( handled && count < MAX ) {
-         handled = dispatchEvent_foo( &tick ) ;
+         handled = dispatchEvent_foo( &tick, now ) ;
          count += 1 ;
      }
 ```
 
-If there is a queue of events, then the following code could be executed periodically
+To accomplish both these above, if there is a queue of events,
+then the following code could be executed periodically
 
 ```C
+    time_t now = getTime() ;
     event_t event ;
-    bool timedOut ;
-    bool success = takeFromQueue( & event ) ;
+    bool_t success = takeFromQueue( & event ) ;
     if( success ) {
         do {
-            bool handled = dispatchEvent_foo( event ) ;
+            bool_t handled = dispatchEvent_foo( event, now ) ;
             int count = 0 ;
             while( handled && count < MAX ) {
-                handled = dispatchEvent_foo( &tick ) ;
+                handled = dispatchEvent_foo( &tick, now ) ;
                 count += 1 ;
             }
             success = takeFromQueue( & event ) ;
         } while( success ) ;
     } else {
-        bool handled = dispatchEvent_foo( &tick ) ;
+        bool_t handled = dispatchEvent_foo( &tick, now ) ;
         int count = 0 ;
         while( handled && count < MAX ) {
-            handled = dispatchEvent_foo( &tick ) ;
+            handled = dispatchEvent_foo( &tick, now ) ;
             count += 1 ;
         }
     }
@@ -386,7 +394,18 @@ Newlines ("\n") are treated as spaces.
 Triggers can be:
 
 * Named triggers: Just a name. These correspond to event classes.
-* After triggers: after( D ) where D is a duration. Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)". The maximum duration depends on your implementation of the time functions and `TickType_t` and is not checked by cogent.
+
+    * Named triggers should be valid C identifiers.
+
+* After triggers: after( D ) where D is a duration.
+
+    * Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)".
+    * The maximum duration depends on your implementation of the `TIME_T` and `IS_AFTER` macros and is not checked by cogent.
+    * A state can have multiple exiting edges with 'after' triggers; these guards are checked from shortest duration to longest.
+    * Transition labelled with 'after' triggers only first on `TICK` events.
+    * Whether enough time has passed in the state to enable the transition is depends on the values of the `now` parameter when the state was entered, the value of `now` at the `TICK` event, and the duration in milliseconds.
+
+* If there is no trigger on an edge leaving a state, it is considered equivalent to `after(0s)`, meaning it's transition can be triggered by any `TICK` event. 
 
 #### Guards
 
@@ -396,16 +415,26 @@ Guards are either the special guard "[else]" or boolean expressions enclosed in 
 * "[ A and not B or C implies D]"
 * "[ A && ! B || C ==> D]"
 
-Basic guards are 
+Boolean expressions consist of one or more basic guards combined with boolean operators.
 
-* A C identifier. This is translated to a function call, e.g. "A" translates to "A( eventP, status )"
+Basic guards can be 
+
+* Named guards: Any C identifier (after substitution). This is translated to a function call, e.g. "A" translates to "A( eventP, status )"
 * Any text between braces. E.g. "{x>10}". These are not translated at all, but output as-is with the braces replaced by parentheses.
 * "in S" where S is the name of a state.  This will be true if state S is active at the time.
-* "OK" this will translate to a `OK( status )`. Note that this is pointless on transitions that leave states, since the `status` variable is initialized to `OK_STATUS`. It only makes sense on transitions that leave choice nodes.
+* "OK". This will translate to a `OK( status )`. Note that this is pointless on transitions that leave states, since the `status` variable is initialized to `OK_STATUS`. It only makes sense on transitions that leave choice nodes. "OK" is case sensitive.
 
 The boolean operators follow the usual rules of precedence (not, then and, then or, then implies) and are right associative.
 
 All keywords (else, not, and, or, implies, OK, in) are case sensitive.
+
+For any given vertex / trigger combination, the guards on the edges have the following restrictions.
+
+* If a transition out of a state has no guard, then it should be the only edge for that trigger.
+* At most one transition may be labelled with an `[else]` guard.
+* If the vertex is a choice pseudostate and there is no else, then at least one guard must be true. This is not checked until runtime.
+* On the other and, if a state has no else and all guards are false, it is not an error, but it will result in the trigger being ignored.
+
 
 #### Action sequences
 
@@ -419,9 +448,18 @@ A sequence of one or more actions can follow a slash "/". Each action can be fol
 
 Each action is either
 
-* A C identifier, such as "f". This is translated into a function call "status = f( event_p, status );".
+*  Named actions: Any C identifier (after substitution) such as "f". This is translated into a function call "status = f( event_p, status );".
 * Any code within braces.  This is copied verbatim into the controller with an extra semicolon tacked on the end. E.g. you could write "{status = 42}" and the generated code will be "{ status = 42 ; }".
 
+#### Substitutions
+
+Named triggers, named guards, and named actions allow a few characters not allowed in C identifiers.
+
+* In triggers: "?" is replaced by "recv".
+* In guards: "?" is replaced by "query".
+* In actions: "?" is replaced by "recv" and "!" is replaced by "send".
+
+In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `c?m1` as a trigger becomes `c_recv_m1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an actions becomes `xyz_send_recv`.
 
 ### Restrictions on transitions.
 
@@ -429,7 +467,7 @@ Transitions come in three flavours
 
 * Strawberry: From a initial pseudo state to a state with the same parent.
 * Vanilla: From a state (simple or composite) to another state or to a choice pseudostate.
-* Chocolate: From a choice psuedostate to another choice psuedostate.
+* Chocolate: From a choice psuedostate to a state or to another choice psuedostate.
 
 Strawberry transitions should not be labelled.
 
@@ -453,13 +491,15 @@ A vanilla transition is enabled if its source state is active and:
 * it has a guard that is true, or
 * it has an else guard and all the competing guards are false.
 
-When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example if there are guards A, B. The generated code might look like this
+#### Multiple enabled transitions
+
+When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example, if there are guards A, B. The generated code for that state/event pair might look like this:
 
 ```C
    status_t status = OK_STATUS ;
    if( A(event_p, status) ) { <<Do transition guarded by A>> }
    else if( B(event_p, status) ) { <<Do transition guarded by B >>}
-   else { <<Do nothing>> }
+   else { /*Do nothing*/ }
 ```
 
 or like this:
@@ -468,7 +508,7 @@ or like this:
    status_t status = OK_STATUS ;
    if( B(event_p, status) ) { <<Do transition guarded by B>> }
    else if( A(event_p, status) ) { <<Do transition guarded by A>> }
-   else { <<Do nothing>> }
+   else { /*Do nothing*/ }
 ```
 
 For the set of all edges leaving a given state that are all labelled with the same named trigger:
@@ -477,7 +517,7 @@ For the set of all edges leaving a given state that are all labelled with the sa
 
 Once a vanilla transition is traversed, the machine is committed, there is no turning back. If it reaches a choice state where no guard is true, the dispatcher will call `assertUnreachable()`.
 
-E.g. if the only two transitions out of a choice pseudostate are guarded by A and B the generated code could be
+E.g. if the only two transitions out of a choice pseudostate are guarded by A and B the generated code for that choice pseudostate could be
 
 ```C
    if( A(event_p, status) ) { <<Do transition guarded by A>> }
@@ -493,14 +533,28 @@ or
    else { assertUnreachable() ; }
 ```
 
-Note that if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.
+Note that, if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.  This is because it will have left at least one state, but will not have entered another.
 
 For the set of all transitions leaving a given choice pseudo state:
 
 * It is necessary that you ensure that at least one guard will be true, or that you have an else-guarded transition.
 * It is good practice to ensure that at most one guard will be true.
 
-#### Using status appropriately
+#### Time and guards
+
+If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time. If all are false
+
+When there are different durations, they are checked in order of increasing duration.  For example if we have
+
+```
+    A -> B : after(1 ms) [P] 
+    A -> C : after(20 ms) 
+```
+Suppose P is false when 1 ms has passed. The first transition is blocked by P and the second by the time.
+
+On the first `TICK` event for with the time in A reaches 20 ms, then, if P is true, the first transition will fire and otherwise the second.
+
+### Using status appropriately
 
 Just before any vanilla transition, a status variable is initialized to `OK_STATUS`.  The status is then threaded through the actions and can be accessed in the guards.  E.g. consider this set of transitions
 
@@ -519,10 +573,9 @@ B --> D : [else] / n
 @enduml
 ```
 
-Here the input status of `f` will be `OK_STATUS` and the output status of `f` will be the input status of `g`. Then the output status of `g` is used to make the decision and then it is input to `h`, `m`, or `n`.  The C code might look like this
+Here the input status of `f` will be `OK_STATUS` and the output status of `f` will be the input status of `g`. Then the output status of `g` is used to make the decision and then it is input to `h`, `m`, or `n`.  The code for state `A` on event `a` might look like this
 
 ```C
-
 status_t status = OK_STATUS ;
 ...some code to exit A...
 status = f( eventP, status ) ;
@@ -541,7 +594,7 @@ if( OK( status ) ) {
 
 ### Pre-emption
 
-When there are enabled transitions out of more than one state that could all fire.  Transitions that leave child (or grandchild, etc) states have priority over transitions out or parent (or grandparent, etc) states.  For example:
+When there are enabled transitions out of more than one state that could all fire:  Transitions that leave child (or grandchild, etc) states have priority over transitions out or parent (or grandparent, etc) states.  For example:
 
 ![Pre-emption diagram](diagrams/preemtion.png)
 
@@ -622,8 +675,7 @@ state M {
 
 Cogent currently considers all vanilla and chocolate transitions to be external. That is that they exit their source and they enter their destination, even if PlantUML draws the diagram "wrong", as in the previous image.
 
-[There should really be a warning when 
-the diagram could be drawn either way.]
+[There should really be a warning when the diagram could be drawn either way.]
 
 [Note that this aspect of cogent may change in the future.]
 
