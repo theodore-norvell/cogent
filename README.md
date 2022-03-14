@@ -61,14 +61,16 @@ should be members `go` and `kill`. There should also be a member called `TICK`. 
 ```C
     typedef enum EventClass_e {go, kill, TICK} ;
 ```
-* A type named `status_t` along with a constant (or macro) `OK_STATUS` and a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
+* A type named `status_t` along with
+* a constant (or macro) `OK_STATUS` and
+* a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
 
 ```C
     typedef status_t int16_t ;
     #define OK_STATUS ((int16_t)0)
     #define OK( s ) ( (s)==OK_STATUS )
 ```
-* For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is none. For the example above, we would need to supply functions
+* For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply functions
 
 ```C
     status_t start(const event_t *, status_t status) {
@@ -392,6 +394,9 @@ Newlines ("\n") are treated as spaces.
 Triggers can be:
 
 * Named triggers: Just a name. These correspond to event classes.
+
+    * Named triggers should be valid C identifiers.
+
 * After triggers: after( D ) where D is a duration.
 
     * Currently a duration is a non-negative integer constant followed by either s for seconds or ms for milliseconds.  Examples "after( 0s )", "after( 255 ms)".
@@ -411,12 +416,14 @@ Guards are either the special guard "[else]" or boolean expressions enclosed in 
 * "[ A and not B or C implies D]"
 * "[ A && ! B || C ==> D]"
 
-Basic guards are 
+Boolean expressions consist of one or more basic guards combined with boolean operators.
 
-* A C identifier. This is translated to a function call, e.g. "A" translates to "A( eventP, status )"
+Basic guards can be 
+
+* Named guards: Any C identifier (after substitution). This is translated to a function call, e.g. "A" translates to "A( eventP, status )"
 * Any text between braces. E.g. "{x>10}". These are not translated at all, but output as-is with the braces replaced by parentheses.
 * "in S" where S is the name of a state.  This will be true if state S is active at the time.
-* "OK" this will translate to a `OK( status )`. Note that this is pointless on transitions that leave states, since the `status` variable is initialized to `OK_STATUS`. It only makes sense on transitions that leave choice nodes.
+* "OK". This will translate to a `OK( status )`. Note that this is pointless on transitions that leave states, since the `status` variable is initialized to `OK_STATUS`. It only makes sense on transitions that leave choice nodes. "OK" is case sensitive.
 
 The boolean operators follow the usual rules of precedence (not, then and, then or, then implies) and are right associative.
 
@@ -442,9 +449,18 @@ A sequence of one or more actions can follow a slash "/". Each action can be fol
 
 Each action is either
 
-* A C identifier, such as "f". This is translated into a function call "status = f( event_p, status );".
+*  Named actions: Any C identifier (after substitution) such as "f". This is translated into a function call "status = f( event_p, status );".
 * Any code within braces.  This is copied verbatim into the controller with an extra semicolon tacked on the end. E.g. you could write "{status = 42}" and the generated code will be "{ status = 42 ; }".
 
+### Substitutions
+
+Named triggers, named guards, and named actions allow a few characters not allowed in C identifiers.
+
+* In triggers: "?" is replaced by "recv".
+* In guards: "?" is replaced by "query".
+* In actions: "?" is replaced by "recv" and "!" is replaced by "send".
+
+In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `c?m1` as a trigger becomes `c_recv_m1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an actions becomes `xyz_send_recv`.
 
 ### Restrictions on transitions.
 
@@ -482,7 +498,7 @@ When there are multiple enabled transitions out of a state for the event, only o
    status_t status = OK_STATUS ;
    if( A(event_p, status) ) { <<Do transition guarded by A>> }
    else if( B(event_p, status) ) { <<Do transition guarded by B >>}
-   else { <<Do nothing>> }
+   else { /*Do nothing*/ }
 ```
 
 or like this:
@@ -491,7 +507,7 @@ or like this:
    status_t status = OK_STATUS ;
    if( B(event_p, status) ) { <<Do transition guarded by B>> }
    else if( A(event_p, status) ) { <<Do transition guarded by A>> }
-   else { <<Do nothing>> }
+   else { /*Do nothing*/ }
 ```
 
 For the set of all edges leaving a given state that are all labelled with the same named trigger:
@@ -523,6 +539,20 @@ For the set of all transitions leaving a given choice pseudo state:
 * It is necessary that you ensure that at least one guard will be true, or that you have an else-guarded transition.
 * It is good practice to ensure that at most one guard will be true.
 
+#### Time and guards
+
+If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. Again it is good practice to ensure that no two guards for the same duration can be true at the same time.
+
+When there are different durations, the are checked in order of increasing duration.  For example if we have
+
+```
+    A -> B : after(1 ms) [P] 
+    A -> C : after(20 ms) 
+```
+Suppose P is false when 1 ms has passed. The first transition is blocked by P and the second by the time.
+
+When the time spent in A reaches 20 ms for the first time, then, if P is true, the first transition will fire and otherwise the second.
+
 #### Using status appropriately
 
 Just before any vanilla transition, a status variable is initialized to `OK_STATUS`.  The status is then threaded through the actions and can be accessed in the guards.  E.g. consider this set of transitions
@@ -545,7 +575,6 @@ B --> D : [else] / n
 Here the input status of `f` will be `OK_STATUS` and the output status of `f` will be the input status of `g`. Then the output status of `g` is used to make the decision and then it is input to `h`, `m`, or `n`.  The code for state `A` on event `a` might look like this
 
 ```C
-
 status_t status = OK_STATUS ;
 ...some code to exit A...
 status = f( eventP, status ) ;
@@ -564,7 +593,7 @@ if( OK( status ) ) {
 
 ### Pre-emption
 
-When there are enabled transitions out of more than one state that could all fire.  Transitions that leave child (or grandchild, etc) states have priority over transitions out or parent (or grandparent, etc) states.  For example:
+When there are enabled transitions out of more than one state that could all fire:  Transitions that leave child (or grandchild, etc) states have priority over transitions out or parent (or grandparent, etc) states.  For example:
 
 ![Pre-emption diagram](diagrams/preemtion.png)
 
