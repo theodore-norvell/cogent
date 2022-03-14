@@ -403,10 +403,9 @@ Triggers can be:
     * The maximum duration depends on your implementation of the `TIME_T` and `IS_AFTER` macros and is not checked by cogent.
     * A state can have multiple exiting edges with 'after' triggers; these guards are checked from shortest duration to longest.
     * Transition labelled with 'after' triggers only first on `TICK` events.
+    * Whether enough time has passed in the state to enable the transition is depends on the values of the `now` parameter when the state was entered, the value of `now` at the `TICK` event, and the duration in milliseconds.
 
 * If there is no trigger on an edge leaving a state, it is considered equivalent to `after(0s)`, meaning it's transition can be triggered by any `TICK` event. 
-
-Edges leaving choice nodes must not have a trigger.
 
 #### Guards
 
@@ -452,7 +451,7 @@ Each action is either
 *  Named actions: Any C identifier (after substitution) such as "f". This is translated into a function call "status = f( event_p, status );".
 * Any code within braces.  This is copied verbatim into the controller with an extra semicolon tacked on the end. E.g. you could write "{status = 42}" and the generated code will be "{ status = 42 ; }".
 
-### Substitutions
+#### Substitutions
 
 Named triggers, named guards, and named actions allow a few characters not allowed in C identifiers.
 
@@ -491,6 +490,8 @@ A vanilla transition is enabled if its source state is active and:
 * it has no guard,
 * it has a guard that is true, or
 * it has an else guard and all the competing guards are false.
+
+#### Multiple enabled transitions
 
 When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example, if there are guards A, B. The generated code for that state/event pair might look like this:
 
@@ -541,9 +542,9 @@ For the set of all transitions leaving a given choice pseudo state:
 
 #### Time and guards
 
-If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. Again it is good practice to ensure that no two guards for the same duration can be true at the same time.
+If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time. If all are false
 
-When there are different durations, the are checked in order of increasing duration.  For example if we have
+When there are different durations, they are checked in order of increasing duration.  For example if we have
 
 ```
     A -> B : after(1 ms) [P] 
@@ -551,9 +552,9 @@ When there are different durations, the are checked in order of increasing durat
 ```
 Suppose P is false when 1 ms has passed. The first transition is blocked by P and the second by the time.
 
-When the time spent in A reaches 20 ms for the first time, then, if P is true, the first transition will fire and otherwise the second.
+On the first `TICK` event for with the time in A reaches 20 ms, then, if P is true, the first transition will fire and otherwise the second.
 
-#### Using status appropriately
+### Using status appropriately
 
 Just before any vanilla transition, a status variable is initialized to `OK_STATUS`.  The status is then threaded through the actions and can be accessed in the guards.  E.g. consider this set of transitions
 
