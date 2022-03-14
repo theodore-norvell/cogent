@@ -455,11 +455,11 @@ Each action is either
 
 Named triggers, named guards, and named actions allow a few characters not allowed in C identifiers.
 
-* In triggers: "?" is replaced by "recv".
+* In triggers: "?" is replaced by "RECV".
 * In guards: "?" is replaced by "query".
 * In actions: "?" is replaced by "recv" and "!" is replaced by "send".
 
-In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `c?m1` as a trigger becomes `c_recv_m1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an actions becomes `xyz_send_recv`.
+In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `C?M1` as a trigger becomes `C_RECV_M1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an actions becomes `xyz_send_recv`.
 
 ### Restrictions on transitions.
 
