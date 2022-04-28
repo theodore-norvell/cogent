@@ -4,6 +4,13 @@ Generate Code from PlantUML statecharts.
 
 Author: Theodore Norvell (theo@mun.ca)
 
+## Before you read this
+
+It would be good to be familiar with the StateChart formalism.  I have a short guide under
+
+> [docs/StateCharts/StateCharts.md](docs/StateCharts/StateCharts.md)
+
+
 ## Example and prerequisites
 
 The input is a plant UML spec such as
@@ -459,7 +466,7 @@ Named triggers, named guards, and named actions allow a few characters not allow
 * In guards: "?" is replaced by "query".
 * In actions: "?" is replaced by "recv" and "!" is replaced by "send".
 
-In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `C?M1` as a trigger becomes `C_RECV_M1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an actions becomes `xyz_send_recv`.
+In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `C?M1` as a trigger becomes `C_RECV_M1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an action becomes `xyz_send_recv`.
 
 ### Restrictions on transitions.
 
@@ -511,7 +518,7 @@ or like this:
    else { /*Do nothing*/ }
 ```
 
-For the set of all edges leaving a given state that are all labelled with the same named trigger:
+For the set of all edges leaving a given state that are labelled with the same named trigger:
 
 * It is good practice to ensure that at most one guard will be true.
 
@@ -552,7 +559,7 @@ When there are different durations, they are checked in order of increasing dura
 ```
 Suppose P is false when 1 ms has passed. The first transition is blocked by P and the second by the time.
 
-On the first `TICK` event for with the time in A reaches 20 ms, then, if P is true, the first transition will fire and otherwise the second.
+On the first `TICK` event after the time in A reaches 20 ms, if P is true, the first transition will fire and otherwise the second.
 
 ### Using status appropriately
 

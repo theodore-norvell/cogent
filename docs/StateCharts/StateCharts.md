@@ -16,7 +16,7 @@ Here is a first statechart.
 
 ![Simple Traffic Light](simpleTraficLight.png)
 
-There are 6 **states** shown in this diagram: `Start`, `NorthSouthGreen`, `NorthSouthAmber`, `EastWestGreen`, `EastWestAmber`, and `AllRed`.  The black ball is not a state but serves to indicate which state is the **initial state**. The black ball is sometimes called a **pseudo state**.
+There are 6 **states** shown in this diagram: `Start`, `NorthSouthGreen`, `NorthSouthAmber`, `EastWestGreen`, `EastWestAmber`, and `AllRed`.  The black ball is not a state but serves to indicate which state is the **initial state**. The black ball is sometimes called a **pseudo state**; it's not a state, but serves to indicate which state is the starting state.
 
 The arrows between states are called **transitions**. Each transition is labelled trigger, and a sequence of **actions**.  The syntax for transition labels, so far, is one of
 
@@ -82,9 +82,9 @@ Statecharts handle one event at a time.  Events are usually processed in the ord
 
 `TICK` events are used to represent the passage of time and can trigger transitions that have triggers that have to do with TIME. We need to make sure that `TICK` events are processed frequently.
 
-Note that there might be no transitions out of the current state that are labelled by the current signal's class.  In that case the event is lost.  This might be ok, but it often indicates a design flaw, which is why you might want to log these events.  In the traffic light example, you can see that when the current state is `AllRed`, `timer` signals will be lost, as will `ev?approaches` signals and in the other four states, `ev?clear` signals will be lost; these are intentional and don't represent design flaws.
+Note that there might be no transitions out of the current state that are labelled by the current signal's class.  In that case the event is lost.  This might be ok, but it often indicates a design flaw, which is why you might want to log these events.  In the traffic light example, you can see that when the current state is `AllRed`, `timer` signals will be lost, as will `ev?approaches` signals; and, in the other four states, `ev?clear` signals will be lost; these are intentional and don't represent design flaws.
 
-Also there might be an ambiguity about what transition to follow.  In this case the choice is arbitrary.  Consider this example.  After 3 `x` signals the sequence of reactions could have been any of `b;a;b`, `b;a;c`, `c;a;b`, or `c;a;c`. 
+Also there might be an ambiguity about what transition to follow.  In this case the choice is arbitrary.  Consider the example below.  After 3 `x` signals the sequence of reactions could have been any of `b;a;b`, `b;a;c`, `c;a;b`, or `c;a;c`. 
 
 ![Ambiguous event](ambiguousEvent.png)
 
@@ -100,7 +100,7 @@ We can associate "entry" and "exit" actions with each state.  This often allows 
 
 One way that Statecharts go beyond ordinary state machines is by allowing states to be nested.  So the set of states will make a tree.  The parent of such a nested state is called an OR node. (Later we'll see that parents can also be AND nodes.) We've already seen that there is a conceptual OR node at the root.
 
-Here is an example with an OR node that is not the root.
+Here is an example with an OR node (`Normal`) that is not the root.
 
 ![Nested Traffic Light](nestedTrafficLight.png)
 
@@ -108,14 +108,16 @@ There are significantly fewer transitions.   Generally, nesting states helps to 
 
 Nesting creates some issues.  The first that the machine can now be "in" multiple states at the same time.  I.e., more than one state can be active.   The rule for OR states is
 
-* If an OR state is active, exactly one of its children is active.
+* If an OR state is active, exactly one of its children is active. 
 * If an OR state is not active, none of its children are active.
+
+Putting the two rules together, we can conclude that that two distinct children or an OR state can't both be active at the same time.
 
 In our example, when `Normal` is active, exactly one of its four children will be active. And when `AllRed` is active, no other state is active except the root state. The root is an OR state that is always active (after initialization), so either `AllRed` or `Normal` will be active, but never both at the same time.
 
 When `Normal` is active an `ev?Approaches` event will change the active state of the root to `AllRed`, meaning that not only does `Nomal` become inactive, but also its active substate.
 
-The transition from `AllRed` to `Normal` is interesting because it doesn't indicate which child of `Normal` should be active.  So it will be the start state for `Normal`, which is `NorthSouthGreen`.
+The transition from `AllRed` to `Normal` is interesting because it doesn't indicate which child of `Normal` should be active.  It will be the start state for `Normal`, which is `NorthSouthGreen`.
 
 If the designers decided that it is better to go from `AllRed` to a different state that can be done like this: 
 
@@ -165,9 +167,9 @@ Here is a tree diagram showing the states of the previous statechart as tree.
 
 ![And Or Tree](andOrTree.png)
 
-The combination of AND and OR states allows us to model complex concurrent systems in a modular way. If we were to rewrite a statechart with N states, as a simple state machine, this could require up to O(2^N) states.   Consider a city with 100 traffic lights.  At any point in time each light could be in one of 5 configurations.  Thus the total number of configurations is 5^100 which is over 7 x 10^69.  Yet our statechart would need only 500 basic states.
+The combination of AND and OR states allows us to model complex concurrent systems in a modular way. If we were to rewrite a statechart with N states, as a simple state machine, this could require up to O( 2^N ) states.   Consider a city with 100 traffic lights.  At any point in time each light could be in one of 5 configurations.  Thus the total number of configurations is 5^100 which is over 7 x 10^69.  Yet our statechart would need only 500 basic states.
 
-**Aside** on terminology and the meta-model.  What I call a "BASIC state", the UML standard calls a "simple state"; what I call an "AND state", the UML standard calls a "composite state"; and what I call an "OR state" the UML standard calls a "region".  UML also has a kind of state called a "submachine state", which I'm ignoring.  In the standard "regions" aren't really states; and there is a strict alternation so that composite states contains only regions and regions contain only "simple", "composite", and "submachine" states.  That sometimes means that UML diagram need "composite states" that have only one child, whereas in our model, an AND state with only one child is never needed.  (Composite states with more than one child are called "orthogonal states" in the standard.) Furthermore, in UML there might be a region with only one child, whereas, in our model there is (almost) never a need to have an OR state with only one child.  My terminology and model is based on von der Beeck's paper [2], which is based on Harel's model and terminology [1]. **End aside.**
+**Aside** on terminology and the meta-model.  What I call a "BASIC state", the UML standard calls a "simple state"; what I call an "AND state", the UML standard calls a "composite state"; and what I call an "OR state" the UML standard calls a "region".  UML also has a kind of state called a "submachine state", which I'm ignoring.  In the standard "regions" aren't really states; and there is a strict alternation so that composite states contains only regions and regions contain only "simple", "composite", and "submachine" states.  That sometimes means that UML diagram need "composite states" that have only one child, whereas in our model, an AND state with only one child is never needed.  (Composite states with more than one child are called "orthogonal states" in the standard.) My terminology and model is based on von der Beeck's paper [2], which is based on Harel's model and terminology [1]. **End aside.**
 
 With concurrent states we can have a situation like this:
 
@@ -175,7 +177,7 @@ With concurrent states we can have a situation like this:
 
 If the active states are {root, A, B, C, E, F} and an `a` event is processed what should happen? 
 
-The obvious choices are that one of the transitions fire or that they both fire.  Statecharts use a "broadcast" model, meaning that events are processed by all the children of an AND state, but the order of processing is not defined.  So, in this example, either of the following sequence of actions should happen:
+The obvious choices are that one of the transitions fire or that they both fire.  Statecharts use a "broadcast" model, meaning that events are processed by all the children of an AND state, but the order of processing is not defined.  So, in this example, either of the following sequence of actions should happen in response to an `a` event:
 
 *  Exit C, x Enter D, Exit F, y, Enter G, or
 *  Exit F, y, Enter G, Exit C, x Enter D.
@@ -186,17 +188,17 @@ Transitions into and out of AND states are interesting, but basically logical.  
 
 ![AND states with transitions](andStatesWithTransitions.png)
 
-Suppose the active states are {root, A, B, D, E, G}.  Any of the four transitions can happen
+Suppose the active states are {root, A, B, D, E, G}.  Any of the four events `a`, `b`, `c`, and `d` could be processed next.
 
 * `a`. In this case A must be exited, so B and E must exited, so D and G must be exited.  All this happens in postfix order. But exits from the AND's children could happen in either order.  So the order of exits is either
     * D, B, G, E, A or G, E, D, B, A.
-    * After all these exits, the transition action happens.
+    * After all these exits, the transition action `w` happens.
     * Next, H is entered and so I and L must be entered and so J and M are entered.  Now it's prefix order, but the order that the children of the AND are entered is nondeterministic. So the possible orders are
     * H, I, J, L, M or H, L, M, I, J
 * Events `c` and `d` are similar.
 * Event `d` is similar, except that J is entered instead of K.
 
-By the way PlantUML can't handle transition in and out of regions. That's why the last figure looks a bit doctored.  It's legit UML, but Plant UML just doesn't cope with them.  You can use composite transitions instead in the diagram.  I'm not dealing with composite transitions in this document.  For more information see the PlantUML documentation.
+By the way PlantUML can't handle transitions in and out of regions. That's why the last figure looks a bit doctored.  It's legit UML, but Plant UML just doesn't cope with them.  You can use composite transitions instead in the diagram.  I'm not dealing with composite transitions in this document.  For more information see the PlantUML documentation.
 
 ## Other features that are useful and easy to support
 
@@ -220,7 +222,7 @@ A guarded transition will only fire if the guard is true.  When more than one tr
 
 ![Simple Guards example](guards.png)
 
-If the active states are `A` and `B`, and an `a` signal is processed
+If the active states are `A` and `B`, and an `a` event is processed
 
 * If `P` is true and `Q` is false, then the transition to `C` will happen.
 * If `Q` is true and `P` is false, then the transition to `D` will happen.
@@ -299,12 +301,19 @@ Note that this is an asynchronous communication between the pseudo states.  In D
 
 In UML statecharts, the order that events are processed is not defined. Suppose that a `go` and `stop` message arrive in quick succession. Both will be queued. If the `go` message is processed first, it will create an `int` signal, which is also queued. Whether the `int` or `stop` signal is processed next is not defined by the UML standard. So the sequence of transitions could be either
 
-* $\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt go / int}}{\longrightarrow}\{{\tt A},{\tt C},{\tt D}\}\stackrel{{\tt int / x}}{\longrightarrow}\{{\tt A},{\tt C},{\tt E}\}\stackrel{{\tt stop / y}}{\longrightarrow}\{{\tt A},{\tt B},{\tt E}\}$ or
-* $\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt go / int}}{\longrightarrow}\{{\tt A},{\tt C},{\tt D}\}\stackrel{{\tt stop / y}}{\longrightarrow}\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt int / x}}{\longrightarrow}\{{\tt A},{\tt B},{\tt E}\}$
+
+$\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt go / int}}{\longrightarrow}\{{\tt A},{\tt C},{\tt D}\}\stackrel{{\tt int / x}}{\longrightarrow}\{{\tt A},{\tt C},{\tt E}\}\stackrel{{\tt stop / y}}{\longrightarrow}\{{\tt A},{\tt B},{\tt E}\}$
+
+
+or
+
+$\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt go / int}}{\longrightarrow}\{{\tt A},{\tt C},{\tt D}\}\stackrel{{\tt stop / y}}{\longrightarrow}\{{\tt A},{\tt B},{\tt D}\}\stackrel{{\tt int / x}}{\longrightarrow}\{{\tt A},{\tt B},{\tt E}\}$
+
+
 
 ### More on triggers
 
-A trigger is what determines whether a transition can proceed, so far we've only seen one kind of trigger which is an *signalName*; there are other possibilities.  The syntax of transition labels is one of
+A trigger indicates when a transition can be executed, so far we've only seen one kind of trigger which is an *signalName*; there are other possibilities.  The syntax of transition labels is one of
 
 > *trigger* / *sequenceOfActions*<BR>
 > *trigger* <BR>
