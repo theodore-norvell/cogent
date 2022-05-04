@@ -1,15 +1,23 @@
 package cogent
 class Backend( val logger : Logger, val out : COutputter ) :
 
+    private val boolType = "bool_t"
+    private val trueConst = "true"
+    private val falseConst = "false"
     private val isInArrayName = "isIn_a"
     private val currentChildArrayName = "currentChild_a"
     private val handledArrayName = "handled_a"
     private val timeEnteredArrayName = "timeEntered_a"
     private val eventPointerName = "event_p"
+    private val statusType = "status_t"
     private val statusVarName = "status"
     private val okStatusConstant = "OK_STATUS"
+    private val okMacro = "OK"
     private val localIndexType = "LOCAL_INDEX_T"
+    private val eventType = "event_t"
+    private val eventClassOf = "eventClassOf"
     private val timeType = "TIME_T"
+    private val toDuration = "TO_DURATION"
     private val isAfter = "IS_AFTER"
     private val now = "now"
 
@@ -26,7 +34,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.putLine( "// This array maps the global index of each OR state to the local index of its currently active state" )
         out.putLine( s"static $localIndexType ${currentChildArrayName}[ OR_STATE_COUNT ] ;" )
         out.putLine( "// This array maps keeps track of which states are active" ) 
-        out.putLine( s"static bool_t $isInArrayName[ STATE_COUNT ] ;" )
+        out.putLine( s"static ${boolType} $isInArrayName[ STATE_COUNT ] ;" )
         out.putLine( "// This array maps keeps track the time at which each active state was entered" ) 
         out.putLine( s"static $timeType $timeEnteredArrayName[ STATE_COUNT ] ;" )
         out.blankLine
@@ -37,9 +45,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
         }
 
         out.blankLine 
-        out.put( s"bool_t dispatchEvent_${chartName}( event_t *${eventPointerName}, $timeType $now ) " )
+        out.put( s"${boolType} dispatchEvent_${chartName}( ${eventType} *${eventPointerName}, $timeType $now ) " )
         out.block{
-            out.put( s"bool_t ${handledArrayName}[ STATE_COUNT ] = {false};" )
+            out.put( s"${boolType} ${handledArrayName}[ STATE_COUNT ] = {${falseConst}};" )
             out.endLine
             generateCodeForState( root, stateChart ) 
             val rootStateName = stateChart.root.getCName
@@ -60,7 +68,8 @@ class Backend( val logger : Logger, val out : COutputter ) :
 
         declMacro( localIndexType, "", "int" )
         declMacro( timeType, "", "unsigned int")
-        declMacro( isAfter, "(d, t0, t1)", "((d) >= (unsigned)(t1)-(unsigned)(t0))")
+        declMacro( isAfter, "(d, t0, t1)", "((TIME_T)(d) <= (TIME_T)((t1)-(t0)))")
+        declMacro( toDuration, "(x)", "x##u")
     }
 
     def generateEnterAndExitDecls( stateChart : StateChart ) : Unit = {
@@ -150,7 +159,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
 
                 // Exit actions go here
 
-                out.put( s"$isInArrayName[ ${globalMacro(state)} ] = false ;" )
+                out.put( s"$isInArrayName[ ${globalMacro(state)} ] = ${falseConst} ;" )
                 out.endLine
             }
     } 
@@ -306,7 +315,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         //println( s"namedTriggers is $namedTriggers")
         //println( s"afterTriggers is $afterTriggers")
         if namedTriggers.size > 0 || afterTriggers.size > 0 then
-            out.switchComm( false, s"eventClassOf(${eventPointerName})" ) {
+            out.switchComm( false, s"${eventClassOf}(${eventPointerName})" ) {
                 for Trigger.NamedTrigger( name ) <- namedTriggers do
                     generateCaseForEvent( name, state, stateChart )
                 end for
@@ -365,7 +374,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             out.put(s"   ! ${handledArrayName}[${globalMacro(state)}]")
             if( intDuration > 0 )
                 out.endLine
-                out.put(s"    && $isAfter( ${intDuration}u, $timeEnteredArrayName[ ${globalMacro(state)} ], $now )")
+                out.put(s"    && $isAfter( ${toDuration}(${intDuration}), $timeEnteredArrayName[ ${globalMacro(state)} ], $now )")
         }{
             val triggerNameForMessages = Some(s"after $intDuration ms")
             generateIfsForEdges( triggerNameForMessages, state, edges, stateChart ) ;
@@ -377,7 +386,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         val locationForMessages = ( s"Vertex ${node.getFullName}" + (if( triggerDescriptionOpt.isEmpty ) "" else s" on trigger '${triggerDescriptionOpt.get}'" ))
         assert( node.isState || node.isChoicePseudostate )
         if( node.isState )
-            out.put( s"status_t ${statusVarName} = ${okStatusConstant} ;") ; out.endLine
+            out.put( s"${statusType} ${statusVarName} = ${okStatusConstant} ;") ; out.endLine
         val elseGuardedEdges = edges.filter( e => e.guardOpt.map( g => g match{
                                                     case Guard.ElseGuard() => true
                                                     case _ => false } ).getOrElse( false ) ) ;
@@ -398,7 +407,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 assert( edges.size == 1 )
                 val edge = unguardedEdges.head
                 if node.isState then
-                    out.put( s"${handledArrayName}[${globalMacro(node)}] = true ; " ) 
+                    out.put( s"${handledArrayName}[${globalMacro(node)}] = ${trueConst} ; " ) 
                     out.endLine
                 end if
                 generateTransition( edge, stateChart )
@@ -420,7 +429,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 val guard = edge.guardOpt.head
                 out.ifComm{ generateGuardExpression( guard, stateChart, node ) }{
                     if node.isState then
-                        out.put( s"${handledArrayName}[${globalMacro(node)}] = true ; " ) 
+                        out.put( s"${handledArrayName}[${globalMacro(node)}] = ${trueConst} ; " ) 
                         out.endLine
                     end if
                     generateTransition( edge, stateChart )
@@ -517,9 +526,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 case Guard.OKGuard() =>
                     if sourceNode.isState then
                         logger.warning( s"Vertex ${sourceNode.getFullName} has an OK guard, but this will always be true at the start of a transition." ) ;
-                        out.put( "true" )
+                        out.put( "${trueConst}" )
                     else
-                        out.put( s"OK( $statusVarName )" )
+                        out.put( s"${okMacro}( $statusVarName )" )
                 case Guard.InGuard( name : String ) => 
                     // TODO. Bug! What if the name was changed!
                     out.put( s"${isInArrayName}[ ${globalMacro(name, stateChart)} ]" )
