@@ -53,30 +53,47 @@ where `foo` is the name of the statechart, obtained from the command line.
 
 This C file can be included into another C file that defines certain prerequisite types, constants, and procedures, discussed below.
 
-As events happen they should be fed into the generated controller and it will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
+As events happen, they should be fed into the generated controller and it will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
 
 ## Prerequisites
 
 The generated code has some prerequisites which need to be supplied. You need to define
 
-* A type `bool_t` and constants `true` and `false`
-* The `event_t` type.
-* A function (or a function-like macro) `eventClassOf(event_t*)` which produces an member of an enum type.
-* The members of that type correspond to the triggers in the diagram: In the example above there
-should be members `go` and `kill`. There should also be a member called `TICK`. For example, this would do
+* The `event_t` type. 
+* A function (or function-like macro) `eventClassOf(event_t*)` which produces a member of an enum type. 
+* The members of that type correspond to the triggers in the diagram: In the example above there should be members `go` and `kill`. There should also be a member called `TICK`. 
+
+For example, the following definitions fulfil the requirements above. 
 
 ```C
-    typedef enum EventClass_e {go, kill, TICK} ;
+    typedef enum eventClass_e {go, kill, TICK} eventClass_t;
+    typedef struct event_s {
+        eventClass_t tag ;
+        union{
+            struct {
+                int a ;
+                char b ;
+            } go ;
+            struct {
+                short d ;
+            } kill ;
+        } ;
+    } event_t ;
+
+    #define eventClassOf(p) ((p)->tag)
 ```
+
+* A type `bool_t` and constants `true` and `false` .
 * A type named `status_t` along with
 * a constant (or macro) `OK_STATUS` and
 * a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
 
 ```C
-    typedef status_t int16_t ;
+    typedef int16_t status_t ;
     #define OK_STATUS ((int16_t)0)
     #define OK( s ) ( (s)==OK_STATUS )
 ```
+
 * For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply functions
 
 ```C
@@ -98,19 +115,21 @@ In this particular example, the input status in both cases will be `OK_STATUS`, 
     }
 ```
 
-* A macro `TIME_T` and a macro `IS_AFTER(d, t0, t1)` that gives a boolean result. The inputs to the macro are
-    
-    * d -- a duration in milliseconds of type `unsigned int`. 
-    * t0 -- a time of type `TIME_T`
-    * t1 -- a time of type `TIME_T`
 
-  The default for `TIME_T` is `unsigned int` and the default for the `IS_AFTER` macro is `((d) >= (unsigned)(t1)-(unsigned)(t0))`. This works if `TIME_T` measures time in milliseconds.  If time were measured in units of `m/n` milliseconds, then this should be modified to `(n*(d) >= m*((unsigned)(t1)-(unsigned)(t0)))`. A consequence of these defaults is that, even if the time wraps around to 0, the `IS_AFTER` macro will continue to give good results, as `d` is not insanely big.
+
 * A macro or function "void assertThat( bool_t )".  This should do nothing if the argument is true. What it does if the argument is false is up to you.
 * A macro or function "void assertUnreachable()".  What this does is up to you.
 
 
-[In the future, Cogent will have defaults for all the prerequisites 
-except for the guard and action methods.]
+## Defaults
+
+Most of these prerequisites can be replaced by placing a macro definition ahead of the code. For example, if you don't have a type bool_t with constants true and false, you can precede the generated code with 
+
+```C
+#define bool_t int ; 
+#define true 1 ;
+#define false 0 ;
+```
 
 ## TICK events
 
@@ -646,6 +665,25 @@ or the same with the first two lines swapped.  Likewise the exits on the last li
 
 As you can see from algorithm of the generated code, the x action should not effect the truth of Q and the action y should not affect the truth of P otherwise things get very hard to analyse.  Likewise you have to be careful with "in" guards. For example if P were "in D" and Q is true, that would be ugly since whether that "in D" is true or not depends on whether the other transition is considered first.
 
+### PlantUML limitation on edges
+
+PlantUML currently rejects diagrams with any transitions that enter or leave a region when that region has sibling regions.
+
+For example, the edge from T to R leaves its region.
+
+```
+@startuml
+state R {
+      [*] -> S
+      --
+      [*] -> T
+      T -> R
+}
+@enduml
+```
+
+Cogent doesn't have any problem with these transitions in principle. But, since it uses PlantUML for parsing, they are rejected by Cogent's parser.
+
 ### Local vs external transitions
 
 UML considers transitions to be either **external** or **local**. Local transitions do not exit the state which they start at, whereas external transitions do.
@@ -686,21 +724,38 @@ Cogent currently considers all vanilla and chocolate transitions to be external.
 
 [Note that this aspect of cogent may change in the future.]
 
-### PlantUML limitation on edges
+### Code generation for `after( D )` expression,
 
-PlantUML currently rejects diagrams with any transitions that enter or leave a region when that region has sibling regions.
+Three macros are used to evaluate whether a given duration has passed.
+The macros can be redefined ahead of the generated code if the defaults
+are not suitable.
 
-For example, the edge from T to R leaves its region.
+The default definitions are
 
+```C
+#define TIME_T unsigned int
+#define IS_AFTER(d, t0, t1) ((TIME_T)(d) <= (TIME_T)((t1)-(t0)))
+#define TO_DURATION(x) x##u
 ```
-@startuml
-state R {
-      [*] -> S
-      --
-      [*] -> T
-      T -> R
-}
-@enduml
+They will be used as follows: If the trigger is `after(60 s)`, the following boolean expression will be generated.
+
+```C
+    IS_AFTER( TO_DURATION(60000), then, now )
 ```
 
-Cogent doesn't have any problem with these transitions in principle. But, since it uses PlantUML for parsing, they are rejected by Cogent's parser.
+where `then` and `now` are expressions of type `TIME_T`.
+
+After expansion, we get the expression
+
+```C
+   ((unsigned int)(60000u) <= (unsigned int)((now)-(then))) 
+```
+
+If that's not suitable, the macros need to be redefined.
+
+The defaults will work as long as the duration is not too long and the TICK events happen at a reasonable rate.
+
+For example, suppose the `unsigned int` type is 16 bits. Suppose a state is entered when the time is 1 day after time 0. That's 8.64e7 ms. This will be reduced mod 2^16 (= 65,536), which gives 23,552. That will be time `then`. If we need to wait 1 minute, that's 60000 ms. Suppose one minute and 1s goes by before the expression is checked. That means the time will be `now` = (8.64e7+61,000) mod 2^16 = 19,016. Note that `then` is a bigger number than `now`. So the comparison is `(unsigned int)(60000u) <= (unsigned int)(now-then)`, with then and now being of type `unsigned int`, which works out to `60000u <= 61000u`, which is true. You can see that with a duration of one minute, the condition needs to be checked within 5.536 seconds of the condition becoming true. So it is a bad idea in this case to have waits of more than about one minute.
+If more time is needed, `TIME_T` can be redefined as `unsigned long int` and `TO_DURATION` to tack `ul` on the end of the number. If that `unsigned long int` type is a 32-bit unsigned type, we would be good for durations up to about 2^32 ms or 49.7 days.
+
+This works because the subtraction of unsigned int from unsigned int gives an unsigned int.  If `TIME_T` were defined as `unsigned short` the story is different, since an unsigned short minus an unsigned short gives an int that might be negative. The conversion back to `TIME_T` should bring that int back to a positive number.
