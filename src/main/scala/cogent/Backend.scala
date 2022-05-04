@@ -88,8 +88,14 @@ class Backend( val logger : Logger, val out : COutputter ) :
             out.put( s"static void ${enterFunctionName(state)} ( $localIndexType childIndex, $timeType $now ) "  )
             out.block{
                 out.endLine
-                out.putLine( s"$isInArrayName[ ${globalMacro(state)} ] = true ;" ) 
+                out.putLine( s"$isInArrayName[ ${globalMacro(state)} ] = ${trueConst} ;" ) 
                 out.putLine( s"$timeEnteredArrayName[ ${globalMacro(state)} ] = $now ;" )
+                if( state != stateChart.root )
+                    val parent = stateChart.parentOf( state ) 
+                    if( parent.isOrState )
+                        val parentGIndexOpt = parent.stateInfo.globalIndex
+                        assert(! parentGIndexOpt.isEmpty )
+                        out.putLine( s"$currentChildArrayName[ ${globalMacro(parent)} ] = ${localMacro(state)} ;" ) 
 
                 // Entry actions go here.
 
