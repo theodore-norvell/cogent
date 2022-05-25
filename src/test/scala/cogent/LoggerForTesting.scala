@@ -14,3 +14,4 @@ class LoggerForTesting
             case Level.Fatal => fatalCount += 1
             case Level.Warning => warnCount += 1
             case _ => ()
+        println( s"Logging ${level} error: $message")

@@ -15,10 +15,11 @@
         state F
         state G
         state H <<choice>>
-        F -> H: a / y
+        F -> H: after(3ms) / y
+        F -> G : [Z] / x
+        F --> E 
         H -> F: [ok] 
         H -> G: [else]
-        F --> E : XYZ
         --
         [*] -> W
         state W {
