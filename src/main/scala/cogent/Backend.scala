@@ -93,8 +93,6 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 if( state != stateChart.root )
                     val parent = stateChart.parentOf( state ) 
                     if( parent.isOrState )
-                        val parentGIndexOpt = parent.stateInfo.globalIndex
-                        assert(! parentGIndexOpt.isEmpty )
                         out.putLine( s"$currentChildArrayName[ ${globalMacro(parent)} ] = ${localMacro(state)} ;" ) 
 
                 // Entry actions go here.
@@ -103,17 +101,19 @@ class Backend( val logger : Logger, val out : COutputter ) :
                     case x @ Node.BasicState( _ ) =>
                         // There should be nothing more to do
                     case x @ Node.OrState( _, _ ) =>
-                        // When an Or state is entered. If the transition is to an descendent,
+                        // When an Or state is entered. If the transition is to a descendent,
                         // There will be an enter call for it soon, so there is no need to
                         // do anything special. Otherwise, we need to  enter the default child.
                         // The default child should be first in the list of children
                         val defaultChild = startChild(x)
-                        out.ifComm( " childIndex == -1 "){ out.put( s"${enterFunctionName( defaultChild )}( -1, $now ) ;") }
+                        out.ifComm( " childIndex == -1 "){
+                            out.put( s"${enterFunctionName( defaultChild )}( -1, $now ) ;")
+                        }
                         out.endLine
                     case x @ Node.AndState( _, _ ) =>
                         // When an AND state is entered, all of its children will also be entered.
                         // There will be another call to enter for the child, if any that is also
-                        // being entered so we don't need to enter than child.
+                        // being entered so we don't need to enter that child.
                         for child <- x.children.filter( _.isState ) do
                             out.ifComm( s"childIndex != ${localMacro(child)} ") {
                                     out.put( s"${enterFunctionName(child)}( -1, $now ) ; ")
@@ -126,7 +126,6 @@ class Backend( val logger : Logger, val out : COutputter ) :
 
             // Generate the exit routine for the the state.
             out.put( s"static void ${exitFunctionName(state)} ( $localIndexType childIndex )" )
-            out.endLine
             out.block{
                 out.endLine
 
@@ -134,7 +133,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                     case x @ Node.BasicState( _ ) =>
                         // There should be nothing more to do
                     case x @ Node.OrState( _, _ ) =>
-                        // When an Or state is exited: If the transition is from an descendent,
+                        // When an Or state is exited: If the transition is from a descendent,
                         // it will already have been exited.
                         // But if the transition is from this node or any node above it
                         // then we must exit the current child.

@@ -11,8 +11,8 @@ import Logger.Level._
 
 object Main :
     def main( args : Array[String] ) : Unit =
-        val logger = new LogToStdError( Logger.Level.Info )
-        println( s"args.length is ${args.length}")
+        val logger = new LogToStdError( Logger.Level.Debug )
+        //println( s"args.length is ${args.length}")
         for i <- 0 until args.length do
             println( s"args($i) is ${args(i)}")
         val chartName : String = if( args != null && args.length > 1 ) args(1) else "foo"
@@ -49,20 +49,25 @@ object Main :
         if ! logger.hasFatality then
             if stateChartList.size == 0 then
                 logger.log( Fatal, "No statecharts to process")
-            else if stateChartList.size > 1 then
-                logger.log( Fatal, "Sorry, only one statechart can be handled right now." )
             else
-                // Step 2: Check that the StateChart is well formed.
-                val stateChart = stateChartList.head
-                val checker = Checker( logger )
-                checker.check( stateChart )
+                // Step 2 Combine all the statecharts to make one big
+                // statechart.
+                val combiner = Combiner( logger )
+                val optStateChart = combiner.combine( stateChartList )
                 if ! logger.hasFatality then
-                    // Step 3: Convert to a C file
-                    logger.log( Info, "Ready for code generation" )
-                    val outFile = new File( outFileName )
-                    import java.io.PrintWriter
-                    val cout = COutputter( new PrintWriter( outFile ) )
-                    val backend = Backend( logger, cout )
-                    backend.generateCCode( stateChart, chartName ) 
+                    assert( ! optStateChart.isEmpty ) 
+                    val stateChart = optStateChart.head
+
+                    // Step 3: Check that the StateChart is well formed.
+                    val checker = Checker( logger )
+                    checker.check( stateChart )
+                    if ! logger.hasFatality then
+                        // Step 4: Convert to a C file
+                        logger.log( Info, "Ready for code generation" )
+                        val outFile = new File( outFileName )
+                        import java.io.PrintWriter
+                        val cout = COutputter( new PrintWriter( outFile ) )
+                        val backend = Backend( logger, cout )
+                        backend.generateCCode( stateChart, chartName ) 
     end main
 end Main

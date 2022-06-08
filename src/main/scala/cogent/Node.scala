@@ -13,6 +13,10 @@ enum Node derives CanEqual :
     
     case ChoicePseudoState( override val stateInfo : StateInformation )
 
+    case EntryPointPseudoState( override val stateInfo : StateInformation )
+
+    case ExitPointPseudoState( override val stateInfo : StateInformation )
+
     def isState : Boolean = 
         this match 
             case BasicState( _ ) => true
@@ -20,6 +24,8 @@ enum Node derives CanEqual :
             case AndState( _, _ ) => true
             case StartMarker( _ ) => false
             case ChoicePseudoState( _ ) => false
+            case EntryPointPseudoState( _ ) => false
+            case ExitPointPseudoState( _ ) => false
     end isState
     
     def isStartMarker : Boolean = 
@@ -29,6 +35,8 @@ enum Node derives CanEqual :
             case AndState( _, _ ) => false
             case StartMarker( _ ) => true
             case ChoicePseudoState( _ ) => false
+            case EntryPointPseudoState( _ ) => false
+            case ExitPointPseudoState( _ ) => false
     end isStartMarker
     
     def isChoicePseudostate : Boolean = 
@@ -38,6 +46,8 @@ enum Node derives CanEqual :
             case AndState( _, _ ) => false
             case StartMarker( _ ) => false
             case ChoicePseudoState( _ ) => true
+            case EntryPointPseudoState( _ ) => false
+            case ExitPointPseudoState( _ ) => false
     end isChoicePseudostate
     
     def isBasicState : Boolean = 
@@ -47,6 +57,8 @@ enum Node derives CanEqual :
             case AndState( _, _ ) => false
             case StartMarker( _ ) => false
             case ChoicePseudoState( _ ) => false
+            case EntryPointPseudoState( _ ) => false
+            case ExitPointPseudoState( _ ) => false
     end isBasicState
     
     def isOrState : Boolean = ! asOrState.isEmpty
@@ -58,6 +70,8 @@ enum Node derives CanEqual :
             case AndState( _, _ ) => None
             case StartMarker( _ ) => None
             case ChoicePseudoState( _ ) => None
+            case EntryPointPseudoState( _ ) => None
+            case ExitPointPseudoState( _ ) => None
     end asOrState
     
     def childStates : Seq[Node] = 
@@ -67,6 +81,8 @@ enum Node derives CanEqual :
             case x @ AndState( _, _ ) => x.children.filter( _.isState )
             case StartMarker( _ ) => Seq[Node]()
             case ChoicePseudoState( _ ) => Seq[Node]()
+            case EntryPointPseudoState( _ ) => Seq[Node]() 
+            case ExitPointPseudoState( _ ) => Seq[Node]()
     end childStates
     
     // Rank is used for sorting both for global indexes and for local indexes.
@@ -77,6 +93,8 @@ enum Node derives CanEqual :
             case AndState( _, _ ) => 1
             case StartMarker( _ ) => 3
             case ChoicePseudoState( _ ) => 2
+            case EntryPointPseudoState( _ ) => 2
+            case ExitPointPseudoState( _ ) => 2
     end rank
 
     def show : String =
@@ -105,6 +123,13 @@ enum Node derives CanEqual :
                                                 .fold("")( (x,y) => x+y )
                     ( s"${indent1}AND State\n${indent}${si.toString}\n"
                     + childrenString)
+
+                case EntryPointPseudoState( si ) => 
+                    s"${indent1}Entry Point\n${indent}${si.toString}\n"
+
+                case ExitPointPseudoState( si ) => 
+                    s"${indent1}Exit Point\n${indent}${si.toString}\n"
+
         end show
         show( this, 0 ) 
     end show
@@ -128,19 +153,33 @@ enum Node derives CanEqual :
 
     def getDepth : Int = stateInfo.depth
 
+    def getInitialState : Option[Node] = stateInfo.initialState
+
+    def setInitialState( initState : Node ) : Unit =
+        assert( stateInfo.initialState.isEmpty )
+        stateInfo.initialState = Some(initState)
+
 end Node
 
+enum Stereotype {
+    case Submachine 
+    case None
+}
 
-class StateInformation( val fullName : String, val depth : Int ) :
+class StateInformation( val fullName : String, val depth : Int, val stereotype : Stereotype ) :
     var entryLabel : Option[String] = None
     var exitLabel : Option[String] = None
     var invLabel : Option[String] = None
     var localIndex : Option[Int] = None
     var globalIndex : Option[Int] = None
     var cName : Option[String] = None
+    var initialState : Option[Node] = None
+
 
     override def toString : String =
-        s"name: $fullName depth: $depth local index: $localIndex global $globalIndex"
+        val initialStateName =  if initialState.isEmpty then ""
+                                else s" initialState: ${initialState.head.getFullName}"
+        s"name: $fullName depth: $depth stereotype: $stereotype local index: $localIndex global index: $globalIndex $initialStateName"
 
     def getCName = cName.head
 

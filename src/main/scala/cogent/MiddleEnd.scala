@@ -29,15 +29,16 @@ class MiddleEnd(val logger : Logger) :
 
     def processBlock( block : BlockUml ) : Option[StateChart] =
         val diagram = block.getDiagram()
+        // It would be nice to be able to find the diagram name.
+        logger.log( Info, s"Processing diagram")
         {
             given Logger = logger
             blockPrinter.printBlock( block )
         }
-
         diagram match
         case ( stateDiagram : StateDiagram ) => 
             constructStateChart( stateDiagram )
-        case _ => reportWarning( "Diagram is not a state diagram" )
+        case _ => logger.info( "Diagrams that are not state diagrams are ignored." )
             None
 
     def constructStateChart( stateDiagram : StateDiagram ) : Option[StateChart] =
@@ -105,7 +106,7 @@ class MiddleEnd(val logger : Logger) :
                     |... of which ${concurrentStates.size} are concurrent.""".stripMargin)
 
         val stereotype = try group.getStereotype() catch (e) => null
-        if stereotype != null then 
+        if stereotype != null && !stereotype.toString.equals("<<submachine>>") then 
                 logger.info( s"Composite node $name has an unknown stereotype ${stereotype.toString}. The stereotype will be ignored.")
         end if
         // No children that are states or similar.
@@ -138,7 +139,6 @@ class MiddleEnd(val logger : Logger) :
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
         val name = leaf2Name( leaf, parentName )
-        val stateInfo = StateInformation( name, depth )
         val node : Node =
             leaf.getLeafType() match
                 case LeafType.STATE =>
@@ -146,25 +146,41 @@ class MiddleEnd(val logger : Logger) :
                     if stereotype != null then 
                         if stereotype.toString.equals( "<<choice>>" ) then
                             logger.debug( s"Leaf node $name identified as a CHOICE pseudostate. ")
+                            val stateInfo = StateInformation( name, depth, Stereotype.None )
                             Node.ChoicePseudoState( stateInfo )
+                        else if stereotype.toString.equals( "<<entryPoint>>" ) then
+                            val stateInfo = StateInformation( name, depth, Stereotype.None )
+                            Node.EntryPointPseudoState( stateInfo )
+                        else if stereotype.toString.equals( "<<exitPoint>>" ) then
+                            val stateInfo = StateInformation( name, depth, Stereotype.None )
+                            Node.ExitPointPseudoState( stateInfo )
+                        else if stereotype.toString.equals( "<<submachine>>") then
+                            val stateInfo = StateInformation( name, depth, Stereotype.Submachine )
+                            logger.log(Debug, s"Leaf node $name identified as a BASIC submachine state. ")
+                            Node.BasicState( stateInfo ) 
                         else if unsupportedStereotypes contains stereotype.toString then
                             reportError( s"Leaf node $name has an unsupported stereotype ${stereotype.toString}.")
                             logger.debug( s"Leaf node $name identified as a BASIC state. ")
+                            val stateInfo = StateInformation( name, depth, Stereotype.None )
                             Node.BasicState( stateInfo )
                         else
                             logger.info( s"Leaf node $name has an unknown stereotype ${stereotype.toString}. It will be treated as a basic state.")
                             logger.debug( s"Leaf node $name identified as a BASIC state. ")
+                            val stateInfo = StateInformation( name, depth, Stereotype.None )
                             Node.BasicState( stateInfo )
                         end if
                     else
                         logger.log(Debug, s"Leaf node $name identified as a BASIC state. ")
+                        val stateInfo = StateInformation( name, depth, Stereotype.None )
                         Node.BasicState( stateInfo )
                     end if
                 case LeafType.CIRCLE_START =>
                     logger.log(Debug, s"Leaf node $name identified as a START marker. ")
+                    val stateInfo = StateInformation( name, depth, Stereotype.None )
                     Node.StartMarker( stateInfo )
                 case LeafType.STATE_CHOICE => 
                     logger.log(Debug, s"Leaf node $name identified as a CHOICE pseudostate. ")
+                    val stateInfo = StateInformation( name, depth, Stereotype.None )
                     Node.ChoicePseudoState( stateInfo )
                 case _ => assert( false, "States should be filtered.")
         addState( leaf, node, sink, entityToNodeMap )
@@ -184,7 +200,12 @@ class MiddleEnd(val logger : Logger) :
             childIndex += 1
         end for
         val children = childMap.values.toSeq
-        val stateInfo = StateInformation( name, depth )
+        val stereotype = try group.getStereotype() catch (e) => null
+        val st = 
+            if stereotype != null && stereotype.toString.equals( "<<submachine>>" ) then
+                Stereotype.Submachine
+            else Stereotype.None
+        val stateInfo = StateInformation( name, depth, st )
         val andState = Node.AndState( stateInfo, children )
         addState( group, andState, sink, entityToNodeMap)
     end makeANDState
@@ -206,8 +227,13 @@ class MiddleEnd(val logger : Logger) :
             extractState( depth+1, name, ParentKind.OR, childIndex, leaf, childMap, entityToNodeMap )
             childIndex += 1
         val children = childMap.values.toSeq
-        val info =  StateInformation( name, depth )
-        val orState = Node.OrState( info, children )
+        val stereotype = try group.getStereotype() catch (e) => null
+        val st = 
+            if stereotype != null && stereotype.toString.equals( "<<submachine>>" ) then
+                Stereotype.Submachine
+            else Stereotype.None
+        val stateInfo = StateInformation( name, depth, st )
+        val orState = Node.OrState( stateInfo, children )
         addState(group, orState, sink, entityToNodeMap ) 
     end makeORState
 
@@ -275,9 +301,6 @@ class MiddleEnd(val logger : Logger) :
 
     def computeParentMap( node : Node, parentMap : mutable.Map[Node, Node] ) : Unit =
         node match
-            case Node.BasicState( si ) =>
-            case Node.ChoicePseudoState( si ) => 
-            case Node.StartMarker( si ) =>
             case Node.OrState( si, children ) =>
                 for child <- children do
                     assert( !(parentMap contains child) )
@@ -289,6 +312,7 @@ class MiddleEnd(val logger : Logger) :
                     assert( !(parentMap contains child) )
                     parentMap.addOne( child, node )
                     computeParentMap( child, parentMap )
+            case _ =>
     end computeParentMap
 
     def display2String( display : Display ) : String = 
@@ -387,13 +411,14 @@ class MiddleEnd(val logger : Logger) :
                                             s" It only has 1 child state, ${initialState.getFullName}. " + 
                                             "That state will be the start state for the OR state.")
                     else
-                        reportError( s"Or state ${orState.getFullName} has no start markers.")
+                        logger.log( Info, s"Or state ${orState.getFullName} has no start markers.")
                     end if
                 case 1 =>
                     val startMarker = startMarkers.head
                     val edges = stateChart.edges.filter( e => e.source == startMarker )
                     edges.size match
-                        case 0 => reportError( s"Or state ${orState.getFullName} has no initial state.")
+                        case 0 =>
+                            logger.log( Info, s"Or state ${orState.getFullName} has no initial state.")
                         case 1 =>
                             var candidate : Node = edges.head.target
                             if ! candidate.isState then 
@@ -412,6 +437,7 @@ class MiddleEnd(val logger : Logger) :
                 val startIndex = initialState.getLocalIndex
                 state0.setLocalIndex( startIndex )
                 initialState.setLocalIndex( 0 )
+                orState.setInitialState( initialState )
             end if
         end for
     }
@@ -435,7 +461,6 @@ class MiddleEnd(val logger : Logger) :
             cNames += name
         end for
     end setCNames
-
 
     def addMissingTriggers(  stateChart : StateChart ) : StateChart =
         logger.log( Debug, "AddingMissingTriggers")
@@ -464,7 +489,6 @@ class MiddleEnd(val logger : Logger) :
     end addMissingTriggers
 
     private val unsupportedStereotypes = Set(
-        "<<entryPoint>>", "<<exitPoint>>", 
         "<<fork>>", "<<join>>",
         "<<inputPin>>", "<<outputPin>>",
         "<<expansionInput>>", "<<expansionOutput>>" )

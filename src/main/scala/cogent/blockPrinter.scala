@@ -19,8 +19,6 @@ object blockPrinter {
             catch (e : Throwable) =>
                 logger.log( Fatal, s"Exception getting the diagram ${e.getMessage()} ${e}" )
                 return ()
-        val description = diagram.getDescription().toString() ;
-        logger.log( Info, s"This diagram is a ${description}")
         diagram match
             case ( stateDiagram : StateDiagram ) => 
                 logger.log( Debug, "This is a state diagram")

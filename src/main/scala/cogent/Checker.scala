@@ -129,7 +129,7 @@ class Checker( val logger : Logger ) :
         val edgesFromNonStates = stateChart.edges.filter( e => ! e.source.isState )
         for e <- edgesFromNonStates do
             if ! e.triggerOpt.isEmpty then
-                logger.fatal( "Edge $e has a trigger. Only edges out of states may have triggers." )
+                logger.fatal( s"Edge $e has a trigger. Only edges out of states may have triggers." )
     }
 
 

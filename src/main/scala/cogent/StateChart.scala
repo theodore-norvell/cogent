@@ -9,7 +9,7 @@ class StateChart(
         val parentMap : Map[Node, Node]
     ) :
     
-    assert( root.isOrState)
+    assert( root.isOrState )
 
     def show : String =
         val rootString = root.show
