@@ -15,9 +15,9 @@ object Main :
         println( s"args.length is ${args.length}")
         for i <- 0 until args.length do
             println( s"args($i) is ${args(i)}")
-        val chartName : String = if( args != null && args.length > 1 ) args(1) else "foo"
-        val inFileName : String = if args != null && args.length > 2 then args(2) else chartName + ".puml"
-        var outFileName : String = if args != null && args.length > 3 then args(3) else chartName + ".c"
+        val chartName : String = if( args != null && args.length > 0 ) args(0) else "foo"
+        val inFileName : String = if args != null && args.length > 1 then args(1) else chartName + ".puml"
+        var outFileName : String = if args != null && args.length > 2 then args(2) else chartName + ".c"
         logger.log( Info, s"Chart name:   ${chartName}" )
         logger.log( Info, s"Source file:  ${inFileName}" )
         logger.log( Info, s"Target file:  ${outFileName}" )
