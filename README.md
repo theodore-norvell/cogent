@@ -728,7 +728,7 @@ Cogent currently considers all vanilla and chocolate transitions to be external.
 
 Three macros are used to evaluate whether a given duration has passed.
 The macros can be redefined ahead of the generated code if the defaults
-are not suitable.
+are not suitable.  (I recommend redefining TIME_T to something more portable like `uint16_t`)
 
 The default definitions are
 
@@ -755,7 +755,8 @@ If that's not suitable, the macros need to be redefined.
 
 The defaults will work as long as the duration is not too long and the TICK events happen at a reasonable rate.
 
-For example, suppose the `unsigned int` type is 16 bits. Suppose a state is entered when the time is 1 day after time 0. That's 8.64e7 ms. This will be reduced mod 2^16 (= 65,536), which gives 23,552. That will be time `then`. If we need to wait 1 minute, that's 60000 ms. Suppose one minute and 1s goes by before the expression is checked. That means the time will be `now` = (8.64e7+61,000) mod 2^16 = 19,016. Note that `then` is a bigger number than `now`. So the comparison is `(unsigned int)(60000u) <= (unsigned int)(now-then)`, with then and now being of type `unsigned int`, which works out to `60000u <= 61000u`, which is true. You can see that with a duration of one minute, the condition needs to be checked within 5.536 seconds of the condition becoming true. So it is a bad idea in this case to have waits of more than about one minute.
-If more time is needed, `TIME_T` can be redefined as `unsigned long int` and `TO_DURATION` to tack `ul` on the end of the number. If that `unsigned long int` type is a 32-bit unsigned type, we would be good for durations up to about 2^32 ms or 49.7 days.
+For example, suppose the `TIME_T` type is 16 bits. Suppose a state is entered when the time is 1 day after time 0. That's 8.64e7 ms. This will be reduced mod 2^16 (= 65,536), which gives 23,552. That will be time `then`. If we need to wait 1 minute, that's 60000 ms. Suppose one minute and 1s goes by before the expression is checked. That means the time will be `now` = (8.64e7+61,000) mod 2^16 = 19,016. Note that `then` is a bigger number than `now`. So the comparison is `(unsigned int)(60000u) <= (unsigned int)(now-then)`, with then and now being of type `unsigned int`, which works out to `60000u <= 61000u`, which is true. If we have a transition labelled with `[SomeConditon]`, that implicitly means `after(0s)aYou can see that with a duration of one minute, the condition needs to be checked within 5.536 seconds of the condition becoming true. So it is a bad idea in this case to have waits of more than about one minute.
+
+If more time is needed, `TIME_T` can be redefined to `uint32_1`. (It would be wise then to redefine `TO_DURATION` to tack `ul` on the end of the number for portability to machines where 32 bits is considered "long".) Then we would be good for durations up to about 2^32 ms or 49.7 days.
 
 This works because the subtraction of unsigned int from unsigned int gives an unsigned int.  If `TIME_T` were defined as `unsigned short` the story is different, since an unsigned short minus an unsigned short gives an int that might be negative. The conversion back to `TIME_T` should bring that int back to a positive number.
