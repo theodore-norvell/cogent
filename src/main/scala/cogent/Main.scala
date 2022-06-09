@@ -19,9 +19,6 @@ object Main :
         val inFileName : String = if args != null && args.length > 2 then args(2) else chartName + ".puml"
         var outFileName : String = if args != null && args.length > 3 then args(3) else chartName + ".c"
         val f : File = new File( inFileName )
-        if ! f.exists() then
-            logger.log( Fatal, s"File ${f} does not exist.")
-            return ()
 
         val sfr : SourceFileReader = 
             try
