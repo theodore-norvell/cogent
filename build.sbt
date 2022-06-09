@@ -1,7 +1,7 @@
 
 // The simplest possible sbt build file is just one line:
 
-scalaVersion := "3.1.0"
+scalaVersion := "3.1.2"
 // That is, to create a valid sbt build, all you've got to do is define the
 // version of Scala you'd like your project to use.
 
@@ -47,7 +47,6 @@ version := "1.0"
 // the sbt dependency from the sbt box on the right-hand side of the screen.
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.0.0"
-
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9" // ???
 
