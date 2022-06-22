@@ -317,8 +317,8 @@ class MiddleEnd(val logger : Logger) :
                                 entityToNodeMap : Map[IEntity, Node],
                                 edgeSet : mutable.Set[Edge] ) : Unit =
         for link <- links do
-            val source = link.getEntity1()
-            val target = link.getEntity2()
+            val source = if link.isInverted() then link.getEntity2() else link.getEntity1()
+            val target = if link.isInverted() then link.getEntity1() else link.getEntity2()
             if !(entityToNodeMap contains source) || !(entityToNodeMap contains target) then
                 reportWarning(s"Link from ${source.getCode().getName()} to ${target.getCode().getName()} ignored.")
             else 
@@ -450,10 +450,10 @@ class MiddleEnd(val logger : Logger) :
                         val newEdge = Edge( source, target, Some(Trigger.AfterTrigger(0)), guardOpt, actions )
                         newEdges += newEdge
                         if source.isBasicState then
-                            logger.info( s"An edge exiting state ${source.getFullName} has no trigger. " +
+                            logger.info( s"Edge $edge exiting state ${source.getFullName} has no trigger. " +
                                             "The trigger will be assumed to be 'after(0s)'.")
                         else
-                            reportError( s"An edge exiting compound state ${source.getFullName} has no trigger. " +
+                            reportError( s"Edge $edge exiting compound state ${source.getFullName} has no trigger. " +
                                             "This is not allowed because completion events are not yet supported." )
                         end if
                     else

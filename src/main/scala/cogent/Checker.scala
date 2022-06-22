@@ -122,14 +122,14 @@ class Checker( val logger : Logger ) :
         val edgesFromStates = stateChart.edges.filter( e => e.source.isState )
         for e <- edgesFromStates do
             if e.triggerOpt.isEmpty then
-                logger.fatal( "Edge $e has no trigger. Completion events are not supported." )
+                logger.fatal( s"Edge $e has no trigger. Completion events are not supported." )
     }
 
     def checkOnlyEdgesOutOfStatesHaveTriggers(  stateChart : StateChart ) : Unit = {
         val edgesFromNonStates = stateChart.edges.filter( e => ! e.source.isState )
         for e <- edgesFromNonStates do
             if ! e.triggerOpt.isEmpty then
-                logger.fatal( "Edge $e has a trigger. Only edges out of states may have triggers." )
+                logger.fatal( s"Edge $e has a trigger. Only edges out of states may have triggers." )
     }
 
 
