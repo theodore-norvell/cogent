@@ -1,7 +1,5 @@
 package cogent
 
-import scala.annotation.showAsInfix
-
 class StateChart(
         val name : String,
         val location : String,

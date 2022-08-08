@@ -1,7 +1,6 @@
 package cogent
 
 import scala.collection.mutable ;
-import java.awt.Taskbar.State
 
 enum Node derives CanEqual :
     val stateInfo : StateInformation 
