@@ -15,6 +15,8 @@ class MiddleEnd(val logger : Logger) :
     import net.sourceforge.plantuml.cucadiagram.LeafType
     import net.sourceforge.plantuml.cucadiagram.Link
     import net.sourceforge.plantuml.cucadiagram.Display
+    import net.sourceforge.plantuml.core.UmlSource
+    import net.sourceforge.plantuml.version.IteratorCounter2
     import scala.jdk.CollectionConverters._
     import scala.collection.mutable
 
@@ -37,11 +39,21 @@ class MiddleEnd(val logger : Logger) :
         }
         diagram match
         case ( stateDiagram : StateDiagram ) => 
-            constructStateChart( stateDiagram )
+            val source : UmlSource = diagram.getSource() 
+            val it : IteratorCounter2 = source.iterator2() ;
+            val lineDescription =
+                if it.hasNext() then it.next().getLocation().toString()
+                else "Unknown Location"
+            // logger.debug( ">>>Source lines")
+            // while it.hasNext() do
+            //     logger.debug( it.next().getLocation().toString() )
+            // end while
+            // logger.debug( "<<<Source lines")
+            constructStateChart( stateDiagram, lineDescription )
         case _ => logger.info( "Diagrams that are not state diagrams are ignored." )
             None
 
-    def constructStateChart( stateDiagram : StateDiagram ) : Option[StateChart] =
+    def constructStateChart( stateDiagram : StateDiagram, lineDescription : String ) : Option[StateChart] =
         // First: recursively walk the tree of PlantUML entities (states and state-like things) in
         // `stateDiagram`.  For each entity we create a corresponding `cogent.Node`.  `entityToNodeMutMap`
         // records a mapping from IEntity objects to `Node` objects.
@@ -64,7 +76,7 @@ class MiddleEnd(val logger : Logger) :
         // Third we compute a map from Nodes to their parents. The
         // root won't be mapped, so this is truly a partial function.
         val parentMutMap = new mutable.HashMap[Node,Node]
-        computeParentMap( rootState, parentMutMap ) 
+        rootState.computeParentMap( parentMutMap ) 
         val parentMap = parentMutMap.toMap
 
         // Fourth, we turn PlantUML edges into cogent.Edge objects.
@@ -73,15 +85,22 @@ class MiddleEnd(val logger : Logger) :
         extractEdgesFromLinks( links, rootState, parentMap, entityToNodeMap, edgeMutSet )
 
         val edgeSet = edgeMutSet.toSet
-
-        var stateChart = StateChart( rootState, nodeSet, edgeSet, parentMap )
-        indexTheNodes( stateChart )
-        setTheStartNodes( stateChart )
-        setCNames( stateChart )
-        stateChart = addMissingTriggers( stateChart )
+        val childrenOfRoot = rootState.asOrState.head.children
+        val name =
+            (if childrenOfRoot.length == 1 && childrenOfRoot.head.isOrState then
+                        childrenOfRoot.head.asOrState.head.getFullName
+            else "*main*")
+        val stateChart = StateChart( name, lineDescription, rootState, nodeSet, edgeSet, parentMap )
         logger.log( Debug, stateChart.show )
         return Some( stateChart )
     end constructStateChart
+
+    def prepareForBackEnd( stateChart : StateChart ) : StateChart = {
+        setCNames( stateChart )
+        indexTheNodes( stateChart )
+        setTheStartNodes( stateChart )
+        addMissingTriggers( stateChart )
+    }
 
     def extractState(   depth : Int,
                         parentName : String,
@@ -105,10 +124,9 @@ class MiddleEnd(val logger : Logger) :
                     |... and ${relevantGroupChildren.size} groups 
                     |... of which ${concurrentStates.size} are concurrent.""".stripMargin)
 
-        val stereotype = try group.getStereotype() catch (e) => null
-        if stereotype != null && !stereotype.toString.equals("<<submachine>>") then 
-                logger.info( s"Composite node $name has an unknown stereotype ${stereotype.toString}. The stereotype will be ignored.")
-        end if
+        val plantStereotype : net.sourceforge.plantuml.cucadiagram.Stereotype
+            = try group.getStereotype() catch (e) => null
+        val stereotype : cogent.Stereotype = extractStereotype( plantStereotype, name )
         // No children that are states or similar.
         if( relevantLeafChildren.size == 0 && relevantGroupChildren.size == 0 ) then
             reportError( s"State $name is a group but has no children that are states" )
@@ -122,7 +140,7 @@ class MiddleEnd(val logger : Logger) :
         // OR states contain no CONCURRENT_STATEs but have at least one child.
         else if( concurrentStates.size == 0 ) then
             logger.log( Debug, s"State $name identified as an OR state" )
-            makeORState( depth, group, name, sink, relevantLeafChildren, relevantGroupChildren, entityToNodeMap )
+            makeORState( depth, group, name, stereotype, sink, relevantLeafChildren, relevantGroupChildren, entityToNodeMap )
         
         // Otherwise there are some children that are concurrent states and some that aren't.
         else 
@@ -139,50 +157,55 @@ class MiddleEnd(val logger : Logger) :
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
         val name = leaf2Name( leaf, parentName )
+
         val node : Node =
             leaf.getLeafType() match
                 case LeafType.STATE =>
-                    val stereotype = leaf.getStereotype()
-                    if stereotype != null then 
-                        if stereotype.toString.equals( "<<choice>>" ) then
-                            logger.debug( s"Leaf node $name identified as a CHOICE pseudostate. ")
-                            val stateInfo = StateInformation( name, depth, Stereotype.None )
-                            Node.ChoicePseudoState( stateInfo )
-                        else if stereotype.toString.equals( "<<entryPoint>>" ) then
-                            val stateInfo = StateInformation( name, depth, Stereotype.None )
-                            Node.EntryPointPseudoState( stateInfo )
-                        else if stereotype.toString.equals( "<<exitPoint>>" ) then
-                            val stateInfo = StateInformation( name, depth, Stereotype.None )
-                            Node.ExitPointPseudoState( stateInfo )
-                        else if stereotype.toString.equals( "<<submachine>>") then
-                            val stateInfo = StateInformation( name, depth, Stereotype.Submachine )
-                            logger.log(Debug, s"Leaf node $name identified as a BASIC submachine state. ")
-                            Node.BasicState( stateInfo ) 
-                        else if unsupportedStereotypes contains stereotype.toString then
-                            reportError( s"Leaf node $name has an unsupported stereotype ${stereotype.toString}.")
-                            logger.debug( s"Leaf node $name identified as a BASIC state. ")
-                            val stateInfo = StateInformation( name, depth, Stereotype.None )
-                            Node.BasicState( stateInfo )
-                        else
-                            logger.info( s"Leaf node $name has an unknown stereotype ${stereotype.toString}. It will be treated as a basic state.")
-                            logger.debug( s"Leaf node $name identified as a BASIC state. ")
-                            val stateInfo = StateInformation( name, depth, Stereotype.None )
-                            Node.BasicState( stateInfo )
-                        end if
-                    else
-                        logger.log(Debug, s"Leaf node $name identified as a BASIC state. ")
-                        val stateInfo = StateInformation( name, depth, Stereotype.None )
+                    val plantStereotype : net.sourceforge.plantuml.cucadiagram.Stereotype
+                        = try leaf.getStereotype() catch (e) => null
+                    val stereotype : cogent.Stereotype = extractStereotype( plantStereotype, name )
+                    stereotype match
+                    case cogent.Stereotype.Choice =>
+                        // Is this reachable or will choice nodes have a different LeafType?
+                        logger.debug( s"Leaf state $name identified as a CHOICE pseudostate. ")
+                        val stateInfo = StateInformation( name, depth, stereotype )
+                        Node.ChoicePseudoState( stateInfo )
+                    case cogent.Stereotype.EntryPoint =>
+                        logger.debug( s"Leaf state $name identified as a ENTRYPOINT pseudostate. ")
+                        val stateInfo = StateInformation( name, depth, stereotype )
+                        Node.EntryPointPseudoState( stateInfo )
+                    case cogent.Stereotype.ExitPoint =>
+                        logger.debug( s"Leaf state $name identified as a EXIT pseudostate. ")
+                        val stateInfo = StateInformation( name, depth, stereotype )
+                        Node.ExitPointPseudoState( stateInfo )
+                    case cogent.Stereotype.Submachine =>
+                        val stateInfo = StateInformation( name, depth, stereotype )
+                        logger.log(Debug, s"Leaf node $name identified as a BASIC submachine state. ")
+                        Node.BasicState( stateInfo ) 
+                    case cogent.Stereotype.None =>
+                        logger.debug( s"Leaf node $name identified as a BASIC state. ")
+                        val stateInfo = StateInformation( name, depth, stereotype )
                         Node.BasicState( stateInfo )
-                    end if
+                    // The following case is not currently needed.
+                    // case _ =>
+                    //     reportError( s"Leaf node $name has an unsupported stereotype ${stereotype.toString}.")
+                    //     logger.debug( s"Leaf node $name identified as a BASIC state. ")
+                    //     val stateInfo = StateInformation( name, depth, Stereotype.None )
+                    //     Node.BasicState( stateInfo )
+                    end match
                 case LeafType.CIRCLE_START =>
                     logger.log(Debug, s"Leaf node $name identified as a START marker. ")
                     val stateInfo = StateInformation( name, depth, Stereotype.None )
                     Node.StartMarker( stateInfo )
                 case LeafType.STATE_CHOICE => 
                     logger.log(Debug, s"Leaf node $name identified as a CHOICE pseudostate. ")
-                    val stateInfo = StateInformation( name, depth, Stereotype.None )
+                    val stateInfo = StateInformation( name, depth, Stereotype.Choice )
                     Node.ChoicePseudoState( stateInfo )
-                case _ => assert( false, "States should be filtered.")
+                case _ =>
+                    reportError( s"Leaf node $name has an unexpected LeafType attribute: ${leaf.getLeafType().toString()}.")
+                    val stateInfo = StateInformation( name, depth, Stereotype.None )
+                    Node.BasicState( stateInfo )
+                end match
         addState( leaf, node, sink, entityToNodeMap )
     end extractState
 
@@ -213,6 +236,7 @@ class MiddleEnd(val logger : Logger) :
     def makeORState( depth : Int,
                     group : IGroup,
                     name : String,
+                    stereotype : cogent.Stereotype,
                     sink : mutable.Map[IEntity,Node],
                     relevantLeafChildren : Seq[ILeaf],
                     relevantGroupChildren : Seq[IGroup],
@@ -227,12 +251,7 @@ class MiddleEnd(val logger : Logger) :
             extractState( depth+1, name, ParentKind.OR, childIndex, leaf, childMap, entityToNodeMap )
             childIndex += 1
         val children = childMap.values.toSeq
-        val stereotype = try group.getStereotype() catch (e) => null
-        val st = 
-            if stereotype != null && stereotype.toString.equals( "<<submachine>>" ) then
-                Stereotype.Submachine
-            else Stereotype.None
-        val stateInfo = StateInformation( name, depth, st )
+        val stateInfo = StateInformation( name, depth, stereotype )
         val orState = Node.OrState( stateInfo, children )
         addState(group, orState, sink, entityToNodeMap ) 
     end makeORState
@@ -254,6 +273,22 @@ class MiddleEnd(val logger : Logger) :
 
     def reportWarning( message : String ) : Unit =
         logger.log( Warning, message )
+
+    def extractStereotype( plantStereotype : net.sourceforge.plantuml.cucadiagram.Stereotype, name : String )
+    : cogent.Stereotype = {
+        if plantStereotype == null then
+            return cogent.Stereotype.None
+        else
+            plantStereotype.toString() match {
+                case "<<submachine>>" => cogent.Stereotype.Submachine
+                case "<<entrypoint>>" => cogent.Stereotype.EntryPoint
+                case "<<exitpoint>>" => cogent.Stereotype.ExitPoint
+                case "<<choice>>" => cogent.Stereotype.Choice
+                case _ =>
+                    logger.info( s"Node $name has an unknown stereotype ${plantStereotype.toString}. The stereotype will be ignored.")
+                    cogent.Stereotype.None
+            }
+    }
 
     def filterLeaves( leaves : Seq[ILeaf] ) : Seq[ILeaf] =
         leaves.filter( (leaf) =>
@@ -299,28 +334,12 @@ class MiddleEnd(val logger : Logger) :
                 false 
         )
 
-    def computeParentMap( node : Node, parentMap : mutable.Map[Node, Node] ) : Unit =
-        node match
-            case Node.OrState( si, children ) =>
-                for child <- children do
-                    assert( !(parentMap contains child) )
-                    parentMap.addOne( child, node )
-                    computeParentMap( child, parentMap )
-                    
-            case Node.AndState( si, children ) =>
-                for child <- children do
-                    assert( !(parentMap contains child) )
-                    parentMap.addOne( child, node )
-                    computeParentMap( child, parentMap )
-            case _ =>
-    end computeParentMap
-
     def display2String( display : Display ) : String = 
         if display == null then ""
         else if display.size() == 0 then ""
         else display.iterator().asScala.toSeq
-             .map( charSeq => charSeq.toString + "\n")
-             .foldRight("")( (a,b) => a+b )
+                .map( charSeq => charSeq.toString + "\n")
+                .foldRight("")( (a,b) => a+b )
 
     def entity2Name( entity : IEntity ) : String =
         val code = entity.getCode()
@@ -442,23 +461,89 @@ class MiddleEnd(val logger : Logger) :
         end for
     }
 
-
+    private val cKeywords : Set[String] =
+        Set[String](
+            "auto",
+            "break",
+            "case",
+            "char",
+            "const",
+            "continue",
+            "default",
+            "do",
+            "double",
+            "else",
+            "enum",
+            "extern",
+            "float",
+            "for",
+            "goto",
+            "if",
+            "inline",
+            "int",
+            "long",
+            "register",
+            "restrict",
+            "return",
+            "short",
+            "signed",
+            "sizeof",
+            "static",
+            "struct",
+            "switch",
+            "typedef",
+            "union",
+            "unsigned",
+            "void",
+            "volatile",
+            "while",
+            "_Alignas",
+            "_Alignof",
+            "_Atomic",
+            "_Bool",
+            "_Complex",
+            "_Decimal128",
+            "_Decimal32",
+            "_Decimal64",
+            "_Generic",
+            "_Imaginary",
+            "_Noreturn",
+            "_Static_assert",
+            "_Thread_local"
+        ) ;
 
     def setCNames(  stateChart : StateChart ) : Unit =
-        logger.log( Debug, "Ensure no duplicate state names")
         val cNames : mutable.Set[ String ] = new mutable.HashSet[ String ]()
         for node <- stateChart.nodes do
-            val name = node.getFullName
-            val len = name.length
-            val shortName = (if len > 10 then name else name.substring(0, len))
-            var cName = shortName
+            var name = node.getFullName
+            // Name must have at least one character.
+            if name.length < 1 then name = "S" 
+            val builder = mutable.StringBuilder()
+            // It must not begin with a digit
+            if '0' <= name(0) && name(0) <= '9' then builder.addOne('S')
+            // Any codepoints other than letters, digits, and underscores
+            // are replaced with their unicode decimal value.
+            for c <- name do
+                if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || c == '_' then
+                    builder.addOne(c)
+                else
+                    val code : Int = c
+                    builder.addAll( "_u" ) 
+                    builder.addAll( code.toString() )
+                    builder.addOne( '_' )
+            val escapedName = builder.toString()
+            var cName = escapedName
             var counter = 0
-            while cNames contains cName do
-                cName = shortName + counter
+            // Check that the result is not already used of a C keyword.
+            // If so try adding various suffixes until a name is found that is ok.
+            while (cNames contains cName)  || (cKeywords contains cName) do
+                val suffix = "_" + counter.toString()
+                cName = escapedName + suffix
+                // Since the max length of C identifiers is now 63, I'm not going to bother checking the length
                 counter += 1
             end while
             node.setCName( cName )
-            cNames += name
+            cNames += cName
         end for
     end setCNames
 
@@ -485,11 +570,7 @@ class MiddleEnd(val logger : Logger) :
                         newEdges += edge
                     end if
         end for
-        StateChart( stateChart.root, stateChart.nodes, newEdges.toSet, stateChart.parentMap )
+        StateChart( stateChart.name, stateChart.location, stateChart.root, stateChart.nodes, newEdges.toSet, stateChart.parentMap )
     end addMissingTriggers
 
-    private val unsupportedStereotypes = Set(
-        "<<fork>>", "<<join>>",
-        "<<inputPin>>", "<<outputPin>>",
-        "<<expansionInput>>", "<<expansionOutput>>" )
 end MiddleEnd

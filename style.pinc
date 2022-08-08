@@ -1,0 +1,5 @@
+    skinparam state {
+      backgroundColor<<submachine>> Lavender
+      backgroundColor<<entrypoint>> Green
+      backgroundColor<<exitpoint>> Red
+    }

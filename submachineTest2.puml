@@ -1,0 +1,56 @@
+@startuml
+!include style.pinc
+    state A
+    state Sub2A <<submachine>> {
+        state R <<entrypoint>>
+        state S <<exitpoint>>
+    }
+    state Sub2B <<submachine>> {
+        state T <<entrypoint>>
+        state U <<exitpoint>>
+    }
+    state Z
+    [*] --> A
+    A --> R
+    S --> T
+    U --> Z
+@enduml
+
+@startuml Sub2A
+!include style.pinc
+    state Sub2A <<submachine>> {
+        state R <<entrypoint>>
+        state Sub2C <<submachine>> {
+            state W <<entrypoint>>
+            state Y <<exitpoint>>
+        }
+        state S <<exitpoint>>
+        R --> W
+        Y --> S
+    }
+@enduml
+
+@startuml Sub2B
+!include style.pinc
+    state Sub2B <<submachine>> {
+        state T <<entrypoint>>
+        state Sub2C <<submachine>> {
+            state W <<entrypoint>>
+            state Y <<exitpoint>>
+        }
+        state U <<exitpoint>>
+        T --> W
+        Y --> U
+    }
+@enduml
+
+@startuml Sub2C
+!include style.pinc
+    state Sub2C <<submachine>> {
+        state W <<entrypoint>>
+        state X
+        state Y <<exitpoint>>
+        W -> X
+        X -> Y
+    }
+@enduml

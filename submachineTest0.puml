@@ -1,0 +1,21 @@
+@startuml
+!include style.pinc
+    state A 
+    state B
+    state Sub0 <<submachine>>
+
+    [*] -> A
+    A -> B : P
+    B -> Sub0 : Q
+    Sub0 -> A : R
+@enduml
+
+@startuml Sub0
+!include style.pinc
+    state Sub0 <<submachine>> {
+        state A
+        state B
+        [*] --> A
+        A -> B
+    }
+@enduml

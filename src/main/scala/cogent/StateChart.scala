@@ -3,6 +3,8 @@ package cogent
 import scala.annotation.showAsInfix
 
 class StateChart(
+        val name : String,
+        val location : String,
         val root : Node,
         val nodes : Set[Node],
         val edges : Set[Edge],
@@ -10,6 +12,8 @@ class StateChart(
     ) :
     
     assert( root.isOrState )
+
+    def description = s"Statechart $name at $location"
 
     def show : String =
         val rootString = root.show
@@ -19,7 +23,7 @@ class StateChart(
                                 .fold("{ ")( (x,y) => s"$x\n  $y") + " }"
         val parentString = parentMap.map( (k,v) => s"Parent of ${k.getFullName} is ${v.getFullName}" )
                                 .fold("")( (x,y) => x + "\n" + y )
-        return s"StateChart\n$rootString\n" +
+        return s"StateChart at $location\n$rootString\n" +
                 s"$nodesString\n$edgesString\n$parentString\n"
     end show
 

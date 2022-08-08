@@ -1,0 +1,28 @@
+@startuml
+!include style.pinc
+    state A
+    state Sub1 <<submachine>> {
+        state X <<entrypoint>>
+        state Y <<exitpoint>>
+    }
+    state B
+
+
+    [*] -down-> A
+    A -right-> X : P
+    Y -down-> B
+    B -left-> A
+@enduml
+
+@startuml Sub1
+!include style.pinc
+    state Sub1 <<submachine>> {
+        state X <<entrypoint>>
+        state Y <<exitpoint>>
+        state U
+        state V
+        X -> U : / act1
+        U -> V : x
+        V -> Y : y
+    }
+@enduml

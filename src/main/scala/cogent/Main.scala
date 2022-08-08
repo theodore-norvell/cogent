@@ -13,8 +13,8 @@ object Main :
     def main( args : Array[String] ) : Unit =
         val logger = new LogToStdError( Logger.Level.Debug )
         //println( s"args.length is ${args.length}")
-        for i <- 0 until args.length do
-            println( s"args($i) is ${args(i)}")
+        // for i <- 0 until args.length do
+        //     println( s"args($i) is ${args(i)}")
         val chartName : String = if( args != null && args.length > 0 ) args(0) else "foo"
         val inFileName : String = if args != null && args.length > 1 then args(1) else chartName + ".puml"
         var outFileName : String = if args != null && args.length > 2 then args(2) else chartName + ".c"
@@ -30,10 +30,11 @@ object Main :
             try
                 new SourceFileReader( f )
             catch (e : Throwable) =>
-                    logger.log( Fatal, s"Exception making SourceFileReader ${e.getMessage()} ${e}" )
-                    return ()
+                logger.log( Fatal, s"Exception making SourceFileReader ${e.getMessage()} ${e}" )
+                return ()
 
         // Step 0. Parse
+        logger.info( "Parsing with PlantUML" ) 
         var blockList : java.util.List[BlockUml] =
             try
                 sfr.getBlocks()
@@ -47,6 +48,7 @@ object Main :
         
         // Step 1: Create a list of StateChart objects
         val blocks = blockList.asScala
+        logger.info( "Parsing successful. Extracting statecharts." ) 
         val middleEnd = MiddleEnd( logger ) 
         val stateChartList = middleEnd.processBlocks( blocks )
         if ! logger.hasFatality then
@@ -55,22 +57,31 @@ object Main :
             else
                 // Step 2 Combine all the statecharts to make one big
                 // statechart.
+                logger.info( "Extraction successful. Expanding submachine references." ) 
                 val combiner = Combiner( logger )
                 val optStateChart = combiner.combine( stateChartList )
                 if ! logger.hasFatality then
                     assert( ! optStateChart.isEmpty ) 
-                    val stateChart = optStateChart.head
+
+                    logger.info( "Expansion complete. Preparing for code generation.")
+
+                    val stateChart = middleEnd.prepareForBackEnd( optStateChart.head )
+
+                    logger.debug( "The prepared statechart is" )
+                    logger.debug( stateChart.show )
 
                     // Step 3: Check that the StateChart is well formed.
+                    logger.info( "Preparation complete. Checking for errors.")
                     val checker = Checker( logger )
                     checker.check( stateChart )
                     if ! logger.hasFatality then
                         // Step 4: Convert to a C file
-                        logger.log( Info, "Ready for code generation" )
+                        logger.log( Info, "Checking complete. Code generation begins." )
                         val outFile = new File( outFileName )
                         import java.io.PrintWriter
                         val cout = COutputter( new PrintWriter( outFile ) )
                         val backend = Backend( logger, cout )
                         backend.generateCCode( stateChart, chartName ) 
+                        logger.log( Info, "Code generation complete." )
     end main
 end Main

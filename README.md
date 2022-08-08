@@ -1,3 +1,32 @@
+<style type="text/css" rel="stylesheet">
+h1 {
+    counter-reset: h2
+}
+
+h2 {
+    counter-reset: h3
+}
+
+h3 {
+    counter-reset: h4
+}
+
+h2:before {
+    counter-increment: h2;
+    content: counter(h2) ". "
+}
+
+h3:before {
+    counter-increment: h3;
+    content: counter(h2) "." counter(h3) ". "
+}
+
+h4:before {
+    counter-increment: h4;
+    content: counter(h2) "." counter(h3) "." counter(h4) ". "
+}
+</style>
+
 # Cogent Project
 
 Generate Code from PlantUML statecharts.
@@ -11,7 +40,7 @@ It would be good to be familiar with the StateChart formalism.  I have a short g
 > [docs/StateCharts/StateCharts.md](docs/StateCharts/StateCharts.md)
 
 
-## Example and prerequisites
+## Example
 
 The input is a plant UML spec such as
 
@@ -36,7 +65,7 @@ Running Cogent with command line
 ```
    scala cogent-assembly-1.0.jar foo first_example.puml first_example.c
 ```
-generates a controller in first_example.c that declares the following procedures.
+generates a controller in file 'first_example.c' that declares the following procedures.
 
 ```C
 void initStateMachine_foo( TIME_T now ) 
@@ -145,7 +174,7 @@ TICK events are used to trigger transitions labelled "after( D )" where D is a d
      }
 ```
 
-And you should periodically send the controller a sequence of tick events fairly frequently:
+And your code should send the controller a sequence of tick events fairly frequently:
 
 ```C
      /* Do this fairly frequently. */
@@ -189,9 +218,7 @@ then the following code could be executed periodically
 
 ### States and pseudostates
 
-States and choice pseudostates (TODO: this may change; revisit this statement later.)should have names that are proper C identifiers and should be less or equal to 20 characters.
-
-But, you can define a state like this
+Any PlantUML name for a state is fine.
 
 ```
 state "Configuring\nmode" as Configuring
@@ -299,7 +326,7 @@ It might be logical to consider W, W2, and W3 to be AND states, each with one ch
 
 #### Initial pseudostates
 
-Each OR state should have one (and only one) initial pseudostate and it should have one and only one transition out of it. This transition must go to a sibling state and should not have an label.
+Each OR state should have one (and only one) initial pseudostate and it should have one and only one transition out of it. This transition must go to a sibling state and should not have a label.
 
 As an exception, an OR state with only one child state does not need a initial pseudo state.
 
@@ -307,23 +334,141 @@ As an exception, an OR state with only one child state does not need a initial p
 
 As shown in the examples, choice pseudostates can be used.
 
-#### Final states
-
-Final states are not supported. Completion events are not supported.
-
 #### Submachines
 
-Submachines play the same rule in statecharts as subroutines play in programming.
+Submachines play the same role in statecharts as macros play in programming.
 
-Submachines are not supported yet.
+If the PUML file has more than one statechart diagram in it, all diagrams after the first are assumed to be submachine definitions.  These may occur in any order.
 
-Supporting them in the future is fairly important since: PlantUML can have trouble dealing with large complex diagrams. And, even if PlantUML did do a good job of rendering large complex diagrams, large complex diagrams can be difficult to understand and review.
+Here is a simple example. It is in file `submachineTest0.puml` Note the two uses of the stereotype `<<submachine>>`.
+
+```
+@startuml
+!include style.pinc
+    state A 
+    state B
+    state Sub0 <<submachine>>
+
+    [*] -> A
+    A -> B : P
+    B -> Sub0 : Q
+    Sub0 -> A : R
+@enduml
+
+@startuml Sub0
+!include style.pinc
+    state Sub0 <<submachine>> {
+        state A
+        state B
+        A -> B
+    }
+@enduml
+```
+
+The included file `style.pinc` specifies styling.
+
+```
+    skinparam state {
+      backgroundColor<<submachine>> Lavender
+      backgroundColor<<entrypoint>> Green
+      backgroundColor<<exitpoint>> Red
+    }
+```
+
+There are two diagrams in file `submachineTest0.puml` and PlantUML will make 2 png files. Here is  `submachineTest0.png`
+
+![submachineTest0.png](diagrams/submachineTest0.png)
+
+Here is `Sub0.png`.  The PNG file gets its name from the name of the diagram given on the first line of the submachine definition: `@startuml Sub0`.
+
+![Sub0.png](diagrams/Sub0.png)
+
+In any submachine definition (i.e., any diagram but the first in the file), there should be one top-level state and it should have the stereotype `<<submachine>>`
+It's a good idea for this name to be the same as the name of the diagram.
+
+Any other state marked with the stereotype (i.e. any such state in the first diagram and any such state other than the one at the top-level in any subsequent diagram) is assumed to be a submachine reference.  Cogent will replace each submachine reference with the the definition.
+
+In this example, both diagrams have states named A and B. These are not the same. The process of submachine expansion renames any states within the submachine. In this case the new state names are `A__Sub0` and `B__Sub0`. 
+
+After expansion, the statechart is this
+
+![submachineTest0Expanded.png](diagrams/submachineTest0Expanded.png)
+
+Some restrictions on submachines.
+
+* In a submachine definition, there should be exactly one state at the top level. It should have the `<<submachine>>` stereotype.
+* Any node in any other diagram with the same name is considered a submachine reference and must use the `<<submachine>>` stereotype.
+* These are the only two ways that this stereotype should be used.
+* Any submachine should only be referenced once in any diagram. (If you try to violate this, I think PlantUML will just treat them as one state and cogent will also treat them as one state. There will be no error or warning.)
+* Submachine definitions can contain submachine references themselves.  However cycles are not allowed as they would lead to infinite state machines.
+* All children of a submachine reference should be entrypoint or exitpoint pseudostates.  These are covered in the next section.
+
+#### Entrypoint and exitpoint pseudostates
+
+These are usually used in conjunction with submachines.  Here is an example:
+
+```
+@startuml
+!include style.pinc
+    state A
+    state Sub1 <<submachine>> {
+        state X <<entrypoint>>
+        state Y <<exitpoint>>
+    }
+    state B
+
+    [*] -down-> A
+    A -right-> X : P
+    Y -down-> B 
+    B -left-> A
+@enduml
+
+@startuml Sub1
+!include style.pinc
+    state Sub1 <<submachine>> {
+        state X <<entrypoint>>
+        state Y <<exitpoint>>
+        state U
+        state V
+        X -> U : / act1
+        U -> V : x
+        V -> Y : y
+    }
+@enduml
+```
+
+Here is the main statechart
+
+![submachineTest1.png](diagrams/submachineTest1.png)
+
+And here is the submachine
+
+![Sub1.png](diagrams/Sub1.png)
+
+The transition from A in the main statechart goes to U in the submachine via the entry point X.
+Similarly the transition out of V in the submachine goes to B in the main statechart via the exitpoint Y.
+
+The entrypoints and exitpoints of a submachine reference must have the same names as those in the definition -- as is the case in the example.  
+
+After expansion, the statechart looks like this.
+
+![submachineTest1Expanded.png](diagrams/submachineTest1Expanded.png)
+
+If there are two submachine references in the same diagram, the names of their exitpoints and entrypoints must be different.
+Otherwise the PlantUML parser will consider that the two pseudostates with the same name are the same pseudostate and arbitrarily pick a parent for it.
+This will result in some strange errors from cogent.
+
+During the expansion process, entrypoints and exitpoints are converted to choice pseudostates and are treated as such for the purpose of checking and code generation.
+Thus error messages might refer to them as choice pseudostates.
+This is true for all entrypoints and exitpoints regardless of whether they are associated with submachines or not.
+Thus entrypoints and exitpoints can have more than one exiting edge, provided the rules for choice pseudostates are followed.
+
 
 #### Other pseudostates
 
+* Final states are not supported. Completion events are not supported.
 * History pseudostates are not supported yet.
-* Junction pseudostates would be easy to support, but I don't know how to make them in PlantUML. You can use choice pseudostates with just one exiting edge, instead.
-* Entry and exit pseudostates are not supported yet.
+* Junction pseudostates would be easy to support, but I don't know how to make them in PlantUML. You can use a choice, entrypoint, or exitpoint pseudostate instead.
 * Terminate pseudostates are not supported.
 * Fork and join pseudostates are not supported.
 
@@ -335,17 +480,19 @@ Notes are ignored.
 
 Entry and exit actions for states are not yet supported.
 
+State invariants are no supported.
+
 Do actions are not supported.
 
 Internal actions are not supported yet.
 
 ### State semantics
 
-Each OR state has at all times a "current child", which is one of its children.
+Each OR state has, at all times, a "current child", which is one of its children.
 
 There is a set of states which are the active states.
 
-When the machine is at rest. We have the following invariants:
+When the machine is at rest --i.e., when no event is being processed-- we have the following invariants:
 
 * ROOT: The root state is always active.
 * OR0: For any OR state, including the root state, if the OR state is active, then the current child of the OR state is also active.
@@ -382,6 +529,8 @@ state W {
 ```
 
 Suppose W, W2, and W22 are all active and the machine is at rest. This implies (by the invariant) that W2 is the current child of W and W22 is the current child of W2.  Let's also suppose that W31 is the current child of W3.
+
+An `a` event occurs.
 
 * First W22 is exited, so it becomes inactive.
 * At this point, W2 is active, but its current child is not, violating OR0
@@ -450,9 +599,9 @@ Basic guards can be
 * "in S" where S is the name of a state.  This will be true if state S is active at the time.
 * "OK". This will translate to a `OK( status )`. Note that this is pointless on transitions that leave states, since the `status` variable is initialized to `OK_STATUS`. It only makes sense on transitions that leave choice nodes. "OK" is case sensitive.
 
-The boolean operators follow the usual rules of precedence (not, then and, then or, then implies) and are right associative.
+The boolean operators follow the usual rules of precedence (**not**, then **and**, then **or**, then **implies**) and are right associative so `a ==> b ==> c` means `a ==> (b ==> c)`.
 
-All keywords (else, not, and, or, implies, OK, in) are case sensitive.
+All keywords (`else`, `not`, `and`, `or`, `implies`, `OK`, `in`) are case sensitive.
 
 For any given vertex / trigger combination, the guards on the edges have the following restrictions.
 
@@ -493,22 +642,22 @@ Transitions come in three flavours
 
 * Strawberry: From a initial pseudo state to a state with the same parent.
 * Vanilla: From a state (simple or composite) to another state or to a choice pseudostate.
-* Chocolate: From a choice psuedostate to a state or to another choice psuedostate.
+* Chocolate: From a choice, entrypoint, or exitpoint psuedostate to a state or to another psuedostate.
 
 Strawberry transitions should not be labelled.
 
 Vanilla transitions should have a trigger.  (If the source state is a simple state, Cogent will rewrite a missing trigger as "after(0s)".)
 
-Chocolate transitions should not have a trigger.
+Chocolate transitions must not have a trigger.
 
 Chocolate transitions may not form a cycle.
 
-For any state, if there is more than one transition out of it with the same named trigger then, of these transitions:
+If more than one chocolate transition exits the same pseudostate, they should all have a guard. At most one may have `else` as its guard.
+
+For any state, if there is more than one vanilla transition out of it with the same named trigger then, of these transitions:
 
 * at most one may be guarded with an else and
 * none may be unguarded.
-
-The same restrictions apply to the set of all transitions that leave a given choice pseudo-state.
 
 ### Using guards appropriately
 
@@ -561,14 +710,14 @@ or
 
 Note that, if `assertUnreachable` simply reports the problem and returns, the machine will (almost certainly be) left with a set of active states that violates invariants OR0 and/or AND0.  This is because it will have left at least one state, but will not have entered another.
 
-For the set of all transitions leaving a given choice pseudo state:
+For the set of all transitions leaving a given choice, entrypoint, or exitpoint pseudostate:
 
 * It is necessary that you ensure that at least one guard will be true, or that you have an else-guarded transition.
 * It is good practice to ensure that at most one guard will be true.
 
 #### Time and guards
 
-If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time. If all are false
+If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time. If all are false, the no transition will fire.
 
 When there are different durations, they are checked in order of increasing duration.  For example if we have
 
@@ -576,7 +725,9 @@ When there are different durations, they are checked in order of increasing dura
     A -> B : after(1 ms) [P] 
     A -> C : after(20 ms) 
 ```
-Suppose P is false when 1 ms has passed. The first transition is blocked by P and the second by the time.
+Suppose P is false when 1 ms has passed. The first transition is blocked by P and the second by the time. 
+
+At every subsequent `TICK` prior to 20ms, P will be tested.
 
 On the first `TICK` event after the time in A reaches 20 ms, if P is true, the first transition will fire and otherwise the second.
 

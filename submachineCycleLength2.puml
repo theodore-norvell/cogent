@@ -1,0 +1,46 @@
+@startuml
+state A 
+state B
+state Little <<submachine>> {
+  state entry1 <<entryPoint>>
+  state entry2 <<entryPoint>>
+  state exit3 <<exitPoint>>
+}
+
+[*] -> A
+A -> B : P
+B --> entry1 : Q
+A --> entry2 : R
+exit3 --> A
+@enduml
+
+@startuml LittleSubmachine2
+state Little <<submachine>> {
+    state Foo <<submachine>> {
+      state foo1 <<entryPoint>>
+      state foo2 <<entryPoint>>
+      state foo3 <<exitPoint>>
+    }
+    state entry1 <<entryPoint>>
+    state entry2 <<entryPoint>>
+    state sin1
+    state sin2
+    entry1 -> sin1 
+    entry2 --> sin1 
+    sin1 -> sin2 : V
+    sin2 --> exitA <<exitPoint>>
+}
+@enduml
+
+@startuml Foo2
+state Foo <<submachine>> {
+    state foo1 <<entryPoint>>
+    state foo2 <<entryPoint>>
+    state foo3 <<exitPoint>>
+    state Little <<submachine>> {
+      state entry1 <<entryPoint>>
+      state entry2 <<entryPoint>>
+      state exit3 <<exitPoint>>
+    }
+}
+@enduml

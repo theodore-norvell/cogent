@@ -1,5 +1,8 @@
 package cogent
 
+import scala.collection.mutable ;
+import java.awt.Taskbar.State
+
 enum Node derives CanEqual :
     val stateInfo : StateInformation 
 
@@ -50,7 +53,29 @@ enum Node derives CanEqual :
             case ExitPointPseudoState( _ ) => false
     end isChoicePseudostate
     
-    def isBasicState : Boolean = 
+    def isEntryPseudostate : Boolean = 
+        this match 
+            case BasicState( _ ) => false
+            case OrState( _, _ ) => false
+            case AndState( _, _ ) => false
+            case StartMarker( _ ) => false
+            case ChoicePseudoState( _ ) => false
+            case EntryPointPseudoState( _ ) => true
+            case ExitPointPseudoState( _ ) => false
+    end isEntryPseudostate
+    
+    def isExitPseudostate : Boolean = 
+        this match 
+            case BasicState( _ ) => false
+            case OrState( _, _ ) => false
+            case AndState( _, _ ) => false
+            case StartMarker( _ ) => false
+            case ChoicePseudoState( _ ) => false
+            case EntryPointPseudoState( _ ) => false
+            case ExitPointPseudoState( _ ) => true
+    end isExitPseudostate
+    
+    def isBasicState : Boolean =
         this match 
             case BasicState( _ ) => true
             case OrState( _, _ ) => false
@@ -74,6 +99,22 @@ enum Node derives CanEqual :
             case ExitPointPseudoState( _ ) => None
     end asOrState
     
+    def computeParentMap( parentMap : mutable.Map[Node,Node] ) : Unit = 
+        def dealWithChild( child : Node ) : Unit = {
+            parentMap(child) = this
+            child.computeParentMap( parentMap )
+        }
+        this match 
+            case BasicState( _ ) => ()
+            case x @ OrState( _, _ ) => x.children.map( dealWithChild( _ ) )
+            case x @ AndState( _, _ ) => x.children.map( dealWithChild( _ ) )
+            case StartMarker( _ ) => ()
+            case ChoicePseudoState( _ ) => ()
+            case EntryPointPseudoState( _ ) => ()
+            case ExitPointPseudoState( _ ) => ()
+        ()
+    end computeParentMap
+    
     def childStates : Seq[Node] = 
         this match 
             case BasicState( _ ) => Seq[Node]()
@@ -84,6 +125,17 @@ enum Node derives CanEqual :
             case EntryPointPseudoState( _ ) => Seq[Node]() 
             case ExitPointPseudoState( _ ) => Seq[Node]()
     end childStates
+    
+    def childNodes : Seq[Node] = 
+        this match 
+            case BasicState( _ ) => Seq[Node]()
+            case x @ OrState( _, _ ) => x.children
+            case x @ AndState( _, _ ) => x.children
+            case StartMarker( _ ) => Seq[Node]()
+            case ChoicePseudoState( _ ) => Seq[Node]()
+            case EntryPointPseudoState( _ ) => Seq[Node]() 
+            case ExitPointPseudoState( _ ) => Seq[Node]()
+    end childNodes
     
     // Rank is used for sorting both for global indexes and for local indexes.
     def rank : Int = 
@@ -153,28 +205,55 @@ enum Node derives CanEqual :
 
     def getDepth : Int = stateInfo.depth
 
-    def getInitialState : Option[Node] = stateInfo.initialState
+    def hasInitialState : Boolean = stateInfo.hasInitialState
+
+    def getInitialState : Node = stateInfo.getInitialState
+
+    def getStereotype : Stereotype = stateInfo.stereotype
 
     def setInitialState( initState : Node ) : Unit =
-        assert( stateInfo.initialState.isEmpty )
-        stateInfo.initialState = Some(initState)
-
+        assert( ! hasInitialState )
+        stateInfo.setInitialState( initState )
 end Node
 
 enum Stereotype {
     case Submachine 
+    case EntryPoint
+    case ExitPoint
+    case Choice
     case None
 }
 
 class StateInformation( val fullName : String, val depth : Int, val stereotype : Stereotype ) :
-    var entryLabel : Option[String] = None
-    var exitLabel : Option[String] = None
-    var invLabel : Option[String] = None
-    var localIndex : Option[Int] = None
-    var globalIndex : Option[Int] = None
-    var cName : Option[String] = None
-    var initialState : Option[Node] = None
+    //var entryLabel : Option[String] = None
+    //var exitLabel : Option[String] = None
+    //var invLabel : Option[String] = None
+    private var localIndex : Option[Int] = None
+    private var globalIndex : Option[Int] = None
+    private var cName : Option[String] = None
+    private var initialState : Option[Node] = None
 
+
+    def copy( newFullName : String, newDepth : Int, newStereotype : Stereotype ) = {
+        val result = StateInformation( newFullName, newDepth, newStereotype ) 
+        //entryLabel.map( x => result.setEntryLabel( x ) )
+        //exitLabel.map( x => result.setExitLabel( x ) )
+        //invLabel.map( x => result.setInvLabel( x ) )
+        localIndex.map( x => result.setLocalIndex( x ) )
+        globalIndex.map( x => result.setGlobalIndex( x ) )
+        cName.map( x => result.setCName( x ) )
+        initialState.map( x => result.setInitialState( x ) )
+        result
+    }
+
+    def copy( ) : StateInformation =
+        copy( fullName, depth, stereotype )
+
+    def withFullName( newName : String ) : StateInformation =
+        copy( newName, depth, stereotype ) 
+
+    def withStereotype( newStereotype : Stereotype ) : StateInformation =
+        copy( fullName, depth, newStereotype ) 
 
     override def toString : String =
         val initialStateName =  if initialState.isEmpty then ""
@@ -192,4 +271,10 @@ class StateInformation( val fullName : String, val depth : Int, val stereotype :
     def getGlobalIndex = globalIndex.head
 
     def setGlobalIndex( gi : Int ) : Unit = {globalIndex = Some(gi) ;}
+
+    def hasInitialState = initialState.nonEmpty
+
+    def getInitialState = initialState.head
+
+    def setInitialState( state : Node ) : Unit = { initialState = Some(state) }
 end StateInformation
