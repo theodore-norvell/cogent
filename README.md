@@ -497,7 +497,9 @@ Transitions come in three flavours
 
 Strawberry transitions should not be labelled.
 
-Vanilla transitions should have a trigger.  (If the source state is a simple state, Cogent will rewrite a missing trigger as "after(0s)".)
+Vanilla transitions should have a trigger.
+
+(If the source state is a simple state, Cogent will rewrite a missing trigger as "after(0s)". For compound states, a vanilla transition with no trigger is triggered by the "completion" of its source state, according to the UML standard; however Cogent does not currently support completion events; and so it is currently necessary for such transitions to have an explicit trigger.)
 
 Chocolate transitions should not have a trigger.
 
@@ -578,7 +580,7 @@ When there are different durations, they are checked in order of increasing dura
 ```
 Suppose P is false when 1 ms has passed. The first transition is blocked by P and the second by the time.
 
-On the first `TICK` event after the time in A reaches 20 ms, if P is true, the first transition will fire and otherwise the second.
+Assuming that the state remains active for 20ms, on the first `TICK` event after the time in A reaches 20 ms, if P is true, the first transition will fire and otherwise the second.
 
 ### Using status appropriately
 
