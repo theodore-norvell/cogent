@@ -37,20 +37,22 @@ class MiddleEnd(val logger : Logger) :
             given Logger = logger
             blockPrinter.printBlock( block )
         }
+
+        val source : UmlSource = diagram.getSource() 
+        val it : IteratorCounter2 = source.iterator2() ;
+        val lineDescription =
+            if it.hasNext() then it.next().getLocation().toString()
+            else "Unknown Location"
+
         diagram match
         case ( stateDiagram : StateDiagram ) => 
-            val source : UmlSource = diagram.getSource() 
-            val it : IteratorCounter2 = source.iterator2() ;
-            val lineDescription =
-                if it.hasNext() then it.next().getLocation().toString()
-                else "Unknown Location"
             // logger.debug( ">>>Source lines")
             // while it.hasNext() do
             //     logger.debug( it.next().getLocation().toString() )
             // end while
             // logger.debug( "<<<Source lines")
             constructStateChart( stateDiagram, lineDescription )
-        case _ => logger.info( "Diagrams that are not state diagrams are ignored." )
+        case _ => logger.info( s"Diagram at $lineDescription: Diagrams that are not state diagrams are ignored." )
             None
 
     def constructStateChart( stateDiagram : StateDiagram, lineDescription : String ) : Option[StateChart] =
@@ -111,8 +113,8 @@ class MiddleEnd(val logger : Logger) :
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit =
         val name = group2Name( group, parentName, parentKind, index )
-
-        logger.log( Debug, s"Processing group $name")
+        val codeLine = try { group.getCodeLine() } catch (ex => s"[Exception ${ex.getMessage()}]") ;
+        logger.log( Debug, s"Processing group $name, with code line $codeLine")
         val leafChildren = group.getLeafsDirect().asScala.toSeq
         val groupChildren = group.getChildren().asScala.toSeq
         val relevantLeafChildren = filterLeaves( leafChildren )
@@ -157,7 +159,8 @@ class MiddleEnd(val logger : Logger) :
                         entityToNodeMap : mutable.Map[IEntity,Node]
     ) : Unit = 
         val name = leaf2Name( leaf, parentName )
-
+        val codeLine = try { leaf.getCodeLine() } catch (ex => s"[Exception ${ex.getMessage()}]") ;
+        logger.log( Debug, s"Processing leaf $name, with code line $codeLine")
         val node : Node =
             leaf.getLeafType() match
                 case LeafType.STATE =>
