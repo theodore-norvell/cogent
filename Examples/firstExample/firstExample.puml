@@ -3,9 +3,9 @@
     state RUNNING
     state C <<choice>>
     [*] -> IDLE
-    IDLE -> C : go
-    C -> RUNNING : [READY] / start
+    IDLE -> C : GO
+    C -> RUNNING : [ready?] / start
     C -> IDLE : [else]
-    RUNNING -> IDLE : kill / stop
+    RUNNING -> IDLE : KILL / stop
     RUNNING --> IDLE : after(60s) / stop
 @enduml
