@@ -11,11 +11,13 @@ It would be good to be familiar with the StateChart formalism.  I have a short g
 > [docs/StateCharts/StateCharts.md](docs/StateCharts/StateCharts.md)
 
 
-## Example and prerequisites
+## Example
 
 The input is a plant UML spec such as
 
 ![First Example](diagrams/firstExample.png)
+
+Here is file `firstExample.puml`
 
 ```
 @startuml
@@ -23,47 +25,55 @@ The input is a plant UML spec such as
     state RUNNING
     state C <<choice>>
     [*] -> IDLE
-    IDLE -> C : go
-    C -> RUNNING : [READY] / start
-    C --> IDLE : [else]
-    RUNNING -> IDLE : kill / stop
-    RUNNING -> IDLE : after(60s) / stop
+    IDLE -> C : GO
+    C -> RUNNING : [ready?] / start
+    C -> IDLE : [else]
+    RUNNING -> IDLE : KILL / stop
+    RUNNING --> IDLE : after(60s) / stop
 @enduml
 ```
 
 Running Cogent with command line
 
 ```
-   scala cogent-assembly-1.0.jar foo first_example.puml first_example.c
+   scala cogent-assembly-1.0.jar firstExample
 ```
-generates a controller in first_example.c that declares the following procedures.
+generates file `firstExample.c` that looks like this:
 
 ```C
-void initStateMachine_foo( TIME_T now ) 
+#include "firstExample.h"
+
+...
+
+void initStateMachine_firstExample( TIME_T now ) 
 {
     ...
 }
-bool_t dispatchEvent_foo( event_t *event_p, TIME_T now ) {
+bool_t dispatchEvent_firstExample( event_t *event_p, TIME_T now ) {
 {
     ...
 }
 ```
 
-where `foo` is the name of the statechart, obtained from the command line.
-
-This C file can be included into another C file that defines certain prerequisite types, constants, and procedures, discussed below.
+The first ellipsis represents some declarations that are used locally within the file.
 
 As events happen, they should be fed into the generated controller and it will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
 
 ## Prerequisites
 
-The generated code has some prerequisites which need to be supplied. You need to define
+### Required prerequisites
 
-* The `event_t` type. 
-* A function (or function-like macro) `eventClassOf(event_t*)` which produces a member of an enum type. 
-* The members of that type correspond to the triggers in the diagram: In the example above there should be members `go` and `kill`. There should also be a member called `TICK`. 
+The generated code has some prerequisites which need to be supplied. These should be in file named `foo_preamble.h`, where `foo` is the name of the statechart i.e., the first command-line argument.
+
+This file should define or include the declarations of:
+
+* The `event_t` type.
+* A function (or function-like macro) `eventClassOf(event_t*)` which produces a member of an enum type.
+
+The members of the `event_t` type correspond to the triggers in the diagram: In the example above there should be members `go` and `kill`. There should also be a member called `TICK`. 
 
 For example, the following definitions fulfil the requirements above. 
+
 
 ```C
     typedef enum eventClass_e {go, kill, TICK} eventClass_t;
@@ -83,8 +93,9 @@ For example, the following definitions fulfil the requirements above.
     #define eventClassOf(p) ((p)->tag)
 ```
 
-* A type `bool_t` and constants `true` and `false` .
-* A type named `status_t` along with
+* A type `bool_t`,
+* constants `true` and `false`,
+* a type named `status_t` along with
 * a constant (or macro) `OK_STATUS` and
 * a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
 
@@ -94,7 +105,7 @@ For example, the following definitions fulfil the requirements above.
     #define OK( s ) ( (s)==OK_STATUS )
 ```
 
-* For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply functions
+* For each action, there needs to be a procedure (function) of type `status_t (const event_t *, status_t status)` with the same name as the action.  These procedures should be declared in the preamble. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply procedures
 
 ```C
     status_t start(const event_t *, status_t status) {
@@ -107,31 +118,29 @@ For example, the following definitions fulfil the requirements above.
 
 In this particular example, the input status in both cases will be `OK_STATUS`, since `start` and `stop` are the first actions on their compound transitions. In both cases, the output status is ignored since `start` and `stop` are also the last actions on their transitions, and there are no subsequent guards that depend on the status.
 
-* For each guard, there needs to be a function of type `bool_t (const event_t *, status_t)`.  For the example above, we would need
+* For each guard, there needs to be a function of type `bool_t (const event_t *, status_t)`.  These functions should be declared in the preamble. For the example above, we would need
 
 ```C
-    bool_t READY(const event_t *, status_t) {
+    bool_t ready_query(const event_t *, status_t) {
         ...
     }
 ```
 
-
-
 * A macro or function "void assertThat( bool_t )".  This should do nothing if the argument is true. What it does if the argument is false is up to you.
 * A macro or function "void assertUnreachable()".  What this does is up to you.
 
+See folder examples/firstExample for how I would organize these declarations and macro definitions into a set of .h files.
 
-## Defaults
+### Optional prerequisites
 
-Most of these prerequisites can be replaced by placing a macro definition ahead of the code. For example, if you don't have a type bool_t with constants true and false, you can precede the generated code with 
+The following macros are defined in the generated code, you can override these definitions by defining them in the preamble include file.
 
-```C
-#define bool_t int ; 
-#define true 1 ;
-#define false 0 ;
-```
+* TIME_T -- discussed in section "Code generation for `after( D )` expression"
+* TO_DURATION -- discussed in section "Code generation for `after( D )` expression"
+* IS_AFTER -- discussed in section "Code generation for `after( D )` expression"
 
-## TICK events
+
+## TICK events and the event dispatch loop
 
 TICK events are used to trigger transitions labelled "after( D )" where D is a duration in seconds or milliseconds.  My advice is after every event that makes the controller return true, feed the controller a sequence of TICK events until it returns false.
 
@@ -450,16 +459,16 @@ Basic guards can be
 * "in S" where S is the name of a state.  This will be true if state S is active at the time.
 * "OK". This will translate to a `OK( status )`. Note that this is pointless on transitions that leave states, since the `status` variable is initialized to `OK_STATUS`. It only makes sense on transitions that leave choice nodes. "OK" is case sensitive.
 
-The boolean operators follow the usual rules of precedence (not, then and, then or, then implies) and are right associative.
+The boolean operators follow the usual rules of precedence (`not`, then `and`, then `or`, then `implies`) and are right associative.
 
-All keywords (else, not, and, or, implies, OK, in) are case sensitive.
+All keywords (`else`, `not`, `and`, `or`, `implies`, `OK`, `in`) are case sensitive.
 
 For any given vertex / trigger combination, the guards on the edges have the following restrictions.
 
 * If a transition out of a state has no guard, then it should be the only edge for that trigger.
 * At most one transition may be labelled with an `[else]` guard.
 * If the vertex is a choice pseudostate and there is no else, then at least one guard must be true. This is not checked until runtime.
-* On the other and, if a state has no else and all guards are false, it is not an error, but it will result in the trigger being ignored.
+* On the other hand, if all transitions out of a state for a particular trigger have guards that evaluate to false, it is not an error, but it will result in the trigger being ignored for that state.
 
 
 #### Action sequences
@@ -472,7 +481,7 @@ A sequence of one or more actions can follow a slash "/". Each action can be fol
 
 #### Actions
 
-Each action is either
+Action can be
 
 *  Named actions: Any C identifier (after substitution) such as "f". This is translated into a function call "status = f( event_p, status );".
 * Any code within braces.  This is copied verbatim into the controller with an extra semicolon tacked on the end. E.g. you could write "{status = 42}" and the generated code will be "{ status = 42 ; }".
@@ -487,7 +496,7 @@ Named triggers, named guards, and named actions allow a few characters not allow
 
 In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `C?M1` as a trigger becomes `C_RECV_M1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an action becomes `xyz_send_recv`.
 
-### Restrictions on transitions.
+### Restrictions and recommendations on transitions.
 
 Transitions come in three flavours
 
@@ -521,7 +530,7 @@ A vanilla transition is enabled if its source state is active and:
 
 #### Multiple enabled transitions
 
-When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example, if there are guards A, B. The generated code for that state/event pair might look like this:
+When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  The exception is `else` guards, which are always checked last. For example, if there are guards A, B. The generated code for that state/event pair might look like this:
 
 ```C
    status_t status = OK_STATUS ;
@@ -539,7 +548,7 @@ or like this:
    else { /*Do nothing*/ }
 ```
 
-For the set of all edges leaving a given state that are labelled with the same named trigger:
+Therefor, for the set of all edges leaving a given state that are labelled with the same named trigger:
 
 * It is good practice to ensure that at most one guard will be true.
 
@@ -570,7 +579,7 @@ For the set of all transitions leaving a given choice pseudo state:
 
 #### Time and guards
 
-If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time. If all are false
+If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time; otherwise there is ambiguity about which should be chosen.
 
 When there are different durations, they are checked in order of increasing duration.  For example if we have
 
