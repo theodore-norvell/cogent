@@ -102,7 +102,6 @@ For example, the following definitions fulfil the requirements above.
 ```C
     typedef int16_t status_t ;
     #define OK_STATUS ((int16_t)0)
-    #define OK( s ) ( (s)==OK_STATUS )
 ```
 
 * For each action, there needs to be a procedure (function) of type `status_t (const event_t *, status_t status)` with the same name as the action.  These procedures should be declared in the preamble. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply procedures
@@ -138,7 +137,20 @@ The following macros are defined in the generated code, you can override these d
 * TIME_T -- discussed in section "Code generation for `after( D )` expression"
 * TO_DURATION -- discussed in section "Code generation for `after( D )` expression"
 * IS_AFTER -- discussed in section "Code generation for `after( D )` expression"
+* OK -- defaults to #define OK( s ) ( (s)==OK_STATUS )
+* GUARD -- defaults to #define GUARD(name) name
+* ACTION -- defaults to #define ACTION(name) name
+* EVENT -- defaults to #define EVENT(name) name
 
+The last three are useful if you have a nameing system in your code but you don't want to clutter up the diagram with extra charaters.  For example you might define
+
+```C
+    #define EVENT(name) name##_event
+    #define GUARD(name) name##_guard
+    #define ACTION(name) name##_action
+```
+
+Now in your C code you use the suffixes, but in the PUML file you leave them off.
 
 ## TICK events and the event dispatch loop
 
