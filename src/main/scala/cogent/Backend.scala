@@ -20,6 +20,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
     private val toDuration = "TO_DURATION"
     private val isAfter = "IS_AFTER"
     private val now = "now"
+    private val eventMacro = "EVENT"
+    private val guardMacro = "GUARD"
+    private val actionMacro = "ACTION"
 
     def generateCCode( stateChart : StateChart, chartName : String ) : Unit = {
 
@@ -74,6 +77,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
         declMacro( timeType, "", "unsigned int")
         declMacro( isAfter, "(d, t0, t1)", "((TIME_T)(d) <= (TIME_T)((t1)-(t0)))")
         declMacro( toDuration, "(x)", "x##u")
+        declMacro( eventMacro, "(name)", "name" )
+        declMacro( guardMacro, "(name)", "name" )
+        declMacro( actionMacro, "(name)", "name" )
     }
 
     def generateDefines( stateChart : StateChart ) : Unit = {
@@ -348,7 +354,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                                 case _ => false
                             }).getOrElse( false ) ) ;
         
-        out.caseComm( name ){
+        out.caseComm( s"$eventMacro($name)" ){
             generateIfsForEdges( Some(name), state, edges, stateChart ) ;
         }
     }
@@ -531,16 +537,16 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 case Guard.OKGuard() =>
                     if sourceNode.isState then
                         logger.warning( s"Vertex ${sourceNode.getFullName} has an OK guard, but this will always be true at the start of a transition." ) ;
-                        out.put( "${trueConst}" )
+                        out.put( trueConst )
                     else
                         out.put( s"${okMacro}( $statusVarName )" )
                 case Guard.InGuard( name : String ) => 
                     // TODO. Bug! What if the name was changed!
                     out.put( s"${isInArrayName}[ ${globalMacro(name, stateChart)} ]" )
                 case Guard.NamedGuard( name : String ) =>
-                    out.put( s"$name( ${eventPointerName}, ${statusVarName} )" ) 
+                    out.put( s"$guardMacro($name)( ${eventPointerName}, ${statusVarName} )" ) 
                 case Guard.RawGuard( rawCCode : String ) =>
-                    out.put (s"( $rawCCode )")
+                    out.put(s"( $rawCCode )")
                 case Guard.NotGuard( operand : Guard ) =>
                     out.put( "! ") ; gge( operand )
                 case Guard.AndGuard( left : Guard, right : Guard ) =>
@@ -599,7 +605,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.comment( s"Code for action $action." ) ; out.endLine
         action match 
             case Action.NamedAction( name : String ) =>
-                out.putLine( s"${statusVarName} = ${name}( ${eventPointerName}, $statusVarName ) ;" )
+                out.putLine( s"${statusVarName} = $actionMacro($name)( ${eventPointerName}, $statusVarName ) ;" )
             case Action.RawAction( rawCCode : String ) =>
                 out.putLine( s"{ ${rawCCode} ; }" )
     }
@@ -638,4 +644,5 @@ class Backend( val logger : Logger, val out : COutputter ) :
         assert( node.isState )
         ("enter_" + node.getCName )
     }
+
 end Backend
