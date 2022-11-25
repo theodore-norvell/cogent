@@ -12,6 +12,18 @@
     #define TO_DURATION(x) x##u
 #endif
 
+#ifndef EVENT
+    #define EVENT(name) name
+#endif
+
+#ifndef GUARD
+    #define GUARD(name) name
+#endif
+
+#ifndef ACTION
+    #define ACTION(name) name
+#endif
+
 #define STATE_COUNT 3
 #define OR_STATE_COUNT 1
 
@@ -48,43 +60,17 @@ bool_t dispatchEvent_firstExample( event_t *event_p, TIME_T now ) {
     bool_t handled_a[ STATE_COUNT ] = {false};
     /* Code for OR state 'root' */{
         switch( currentChild_a[ G_INDEX_root] ) {
-            case L_INDEX_IDLE : {
-                /* Code for basic state 'IDLE' */{
-                    /* Event handling code for state IDLE */
-                    switch( eventClassOf(event_p) ) {
-                        case GO : {
-                            status_t status = OK_STATUS ;
-                            handled_a[G_INDEX_IDLE] = true ; 
-                            /* Transition from IDLE to C. */
-                            exit_IDLE( -1 ) ;
-                            if( 
-                                ready_query( event_p, status )
-                             ){
-                                /* Transition from C to RUNNING. */
-                                /* Code for action NamedAction(start). */
-                                status = start( event_p, status ) ;
-                                enter_RUNNING( -1, now ) ;
-                            } else {
-                                /* Transition from C to IDLE. */
-                                enter_IDLE( -1, now ) ;
-                            }
-                        } break ;
-                        default : { }
-                    }
-                }/* End of basic state 'IDLE' */
-                handled_a[ G_INDEX_root ] = handled_a[ G_INDEX_IDLE ] ;
-            } break ;
             case L_INDEX_RUNNING : {
                 /* Code for basic state 'RUNNING' */{
                     /* Event handling code for state RUNNING */
                     switch( eventClassOf(event_p) ) {
-                        case KILL : {
+                        case EVENT(KILL) : {
                             status_t status = OK_STATUS ;
                             handled_a[G_INDEX_RUNNING] = true ; 
                             /* Transition from RUNNING to IDLE. */
                             exit_RUNNING( -1 ) ;
                             /* Code for action NamedAction(stop). */
-                            status = stop( event_p, status ) ;
+                            status = ACTION(stop)( event_p, status ) ;
                             enter_IDLE( -1, now ) ;
                         } break ;
                         case TICK : {
@@ -96,7 +82,7 @@ bool_t dispatchEvent_firstExample( event_t *event_p, TIME_T now ) {
                                 /* Transition from RUNNING to IDLE. */
                                 exit_RUNNING( -1 ) ;
                                 /* Code for action NamedAction(stop). */
-                                status = stop( event_p, status ) ;
+                                status = ACTION(stop)( event_p, status ) ;
                                 enter_IDLE( -1, now ) ;
                             }
                         } break ;
@@ -104,6 +90,32 @@ bool_t dispatchEvent_firstExample( event_t *event_p, TIME_T now ) {
                     }
                 }/* End of basic state 'RUNNING' */
                 handled_a[ G_INDEX_root ] = handled_a[ G_INDEX_RUNNING ] ;
+            } break ;
+            case L_INDEX_IDLE : {
+                /* Code for basic state 'IDLE' */{
+                    /* Event handling code for state IDLE */
+                    switch( eventClassOf(event_p) ) {
+                        case EVENT(GO) : {
+                            status_t status = OK_STATUS ;
+                            handled_a[G_INDEX_IDLE] = true ; 
+                            /* Transition from IDLE to C. */
+                            exit_IDLE( -1 ) ;
+                            if( 
+                                GUARD(ready_query)( event_p, status )
+                             ){
+                                /* Transition from C to RUNNING. */
+                                /* Code for action NamedAction(start). */
+                                status = ACTION(start)( event_p, status ) ;
+                                enter_RUNNING( -1, now ) ;
+                            } else {
+                                /* Transition from C to IDLE. */
+                                enter_IDLE( -1, now ) ;
+                            }
+                        } break ;
+                        default : { }
+                    }
+                }/* End of basic state 'IDLE' */
+                handled_a[ G_INDEX_root ] = handled_a[ G_INDEX_IDLE ] ;
             } break ;
             default : { assertUnreachable() ; }
         }
