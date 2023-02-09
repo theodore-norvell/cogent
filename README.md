@@ -102,7 +102,6 @@ For example, the following definitions fulfil the requirements above.
 ```C
     typedef int16_t status_t ;
     #define OK_STATUS ((int16_t)0)
-    #define OK( s ) ( (s)==OK_STATUS )
 ```
 
 * For each action, there needs to be a procedure (function) of type `status_t (const event_t *, status_t status)` with the same name as the action.  These procedures should be declared in the preamble. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply procedures
@@ -138,7 +137,20 @@ The following macros are defined in the generated code, you can override these d
 * TIME_T -- discussed in section "Code generation for `after( D )` expression"
 * TO_DURATION -- discussed in section "Code generation for `after( D )` expression"
 * IS_AFTER -- discussed in section "Code generation for `after( D )` expression"
+* OK -- defaults to #define OK( s ) ( (s)==OK_STATUS )
+* GUARD -- defaults to #define GUARD(name) name
+* ACTION -- defaults to #define ACTION(name) name
+* EVENT -- defaults to #define EVENT(name) name
 
+The last three are useful if you have a nameing system in your code but you don't want to clutter up the diagram with extra charaters.  For example you might define
+
+```C
+    #define EVENT(name) name##_event
+    #define GUARD(name) name##_guard
+    #define ACTION(name) name##_action
+```
+
+Now in your C code you use the suffixes, but in the PUML file you leave them off.
 
 ## TICK events and the event dispatch loop
 
@@ -767,6 +779,7 @@ If that's not suitable, the macros need to be redefined.
 The defaults will work as long as the duration is not too long and the TICK events happen at a reasonable rate.
 
 For example, suppose the `unsigned int` type is 16 bits. Suppose a state is entered when the time is 1 day after time 0. That's 8.64e7 ms. This will be reduced mod 2^16 (= 65,536), which gives 23,552. That will be time `then`. If we need to wait 1 minute, that's 60000 ms. Suppose one minute and 1s goes by before the expression is checked. That means the time will be `now` = (8.64e7+61,000) mod 2^16 = 19,016. Note that `then` is a bigger number than `now`. So the comparison is `(unsigned int)(60000u) <= (unsigned int)(now-then)`, with then and now being of type `unsigned int`, which works out to `60000u <= 61000u`, which is true. You can see that with a duration of one minute, the condition needs to be checked within 5.536 seconds of the condition becoming true. So it is a bad idea in this case to have waits of more than about one minute.
+
 If more time is needed, `TIME_T` can be redefined as `unsigned long int` and `TO_DURATION` to tack `ul` on the end of the number. If that `unsigned long int` type is a 32-bit unsigned type, we would be good for durations up to about 2^32 ms or 49.7 days.
 
 This works because the subtraction of unsigned int from unsigned int gives an unsigned int.  If `TIME_T` were defined as `unsigned short` the story is different, since an unsigned short minus an unsigned short gives an int that might be negative. The conversion back to `TIME_T` should bring that int back to a positive number.
