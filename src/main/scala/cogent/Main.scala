@@ -9,9 +9,12 @@ import scala.jdk.CollectionConverters._
 
 import Logger.Level._
 
+
 object Main :
     def main( args : Array[String] ) : Unit =
         val logger = new LogToStdError( Logger.Level.Info )
+        val commit = gitCommit.gitCommit( )
+        logger.log( Info, s"Cogent version $commit.")
         println( s"args.length is ${args.length}")
         for i <- 0 until args.length do
             println( s"args($i) is ${args(i)}")
