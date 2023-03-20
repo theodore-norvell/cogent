@@ -624,13 +624,12 @@ The boolean operators follow the usual rules of precedence (**not**, then **and*
 
 All keywords (`else`, `not`, `and`, `or`, `implies`, `OK`, `in`) are case sensitive.
 
-For any given vertex / trigger combination, the guards on the edges have the following restrictions.
+For any given vertex / trigger combination, the guards on the edges leaving the vertex have the following restrictions.
 
 * If a transition out of a state has no guard, then it should be the only edge for that trigger.
 * At most one transition may be labelled with an `[else]` guard.
-* If the vertex is a choice pseudostate and there is no else, then at least one guard must be true. This is not checked until runtime.
-* On the other hand, if all transitions out of a state for a particular trigger have guards that evaluate to false, it is not an error, but it will result in the trigger being ignored for that state.
-
+* If the vertex is a choice, entrypoint, or exitpoint pseudostate and there is no `[else]` guard, then at least one of the guards must be true at the time of the triggering event. This is not checked until runtime.
+* On the other hand, if the vertex is a state and all the guards evaluate to false at the time of the triggering event, it is not an error, but it will result in the event being ignored for that state.
 
 #### Action sequences
 
@@ -663,7 +662,7 @@ Transitions come in three flavours
 
 * Strawberry: From a initial pseudo state to a state with the same parent.
 * Vanilla: From a state (simple or composite) to another state or to a choice pseudostate.
-* Chocolate: From a choice, entrypoint, or exitpoint psuedostate to a state or to another psuedostate.
+* Chocolate: From a choice, entrypoint, or exitpoint pseudostate to a state or to another pseudostate.
 
 Strawberry transitions should not be labelled.
 
@@ -691,7 +690,7 @@ A vanilla transition is enabled if its source state is active and:
 
 #### Multiple enabled transitions
 
-When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  The exception is `else` guards, which are always checked last. For example, if there are guards A, B. The generated code for that state/event pair might look like this:
+When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the generated code, but that could change, when it is next generated).  The exception is `else` guards, which are always checked last. For example, if there are guards A, B. The generated code for that state/event pair might look like this:
 
 ```C
    status_t status = OK_STATUS ;
@@ -709,7 +708,7 @@ or like this:
    else { /*Do nothing*/ }
 ```
 
-Therefor, for the set of all edges leaving a given state that are labelled with the same named trigger:
+Therefore, for the set of all edges leaving a given state that are labelled with the same named trigger:
 
 * It is good practice to ensure that at most one guard will be true.
 
@@ -753,6 +752,71 @@ Suppose P is false when 1 ms has passed. The first transition is blocked by P an
 At every subsequent `TICK` prior to 20ms, P will be tested.
 
 Assuming that the state remains active for 20ms, on the first `TICK` event after the time in A reaches 20 ms, if P is true, the first transition will fire and otherwise the second.
+
+### Polling
+
+There are subtle differences in how polling works depending on how the statechart is written.
+
+Example 0:
+
+```
+    state A
+    state B
+    A -> B : after(0ms) [condition] / action
+```
+
+When A is active, the condition will be tested with every `TICK` event.
+
+In Killick-1 this will poll at a rate of once every 10ms. (Currently.)
+
+Example 1:
+
+```
+    state A
+    state B
+    A -> B : after(1s) [condition] / action
+```
+
+This might not mean what you think.
+When A has been active for 1s the condition will then be tested.
+If the condition is false at that time, the condition will then be tested with every `TICK` event. So 1s is a minimum wait time, but the after that the transition will be tested frequently.
+
+In Killick-1 this will poll at a rate of once every 10ms. (Currently.)
+
+Example 2:
+
+```
+    state A
+    state B
+    state C <<choice>>
+    A -> C : after(1s) 
+    C -> B : [condition] / action
+    C -> A : [else]
+```
+
+In this case, state A will be re-entered after 1s. This resets the entry time for state A, and so the condition will be tested once per second.
+
+Thus the condition will be polled once per second.
+
+Example 3:
+
+```
+    state A
+    state B
+    state C <<choice>>
+    A -> C : after(0ms) 
+    C -> B : [condition] / action
+    C -> A : [else]
+```
+
+This is a bad idea.  The condition will be tested with every `TICK` event.  
+The recommended way of setting up driver code will pump in TICK events until there is a TICK event that does not cause a transition.
+So, depending on how the driver code is set up, this may cause an infinite loop in the driver code.
+
+In Killick-1 the driver code (currently) pumps in a new TICK event 1ms after any handled event.
+So this won't create an infinite loop, but it will cause polling
+every 1ms.
+Example 0 or example 2 are probably a better approach.
 
 ### Using status appropriately
 
@@ -856,7 +920,7 @@ state R {
 @enduml
 ```
 
-Cogent doesn't have any problem with these transitions in principle. But, since it uses PlantUML for parsing, they are rejected by Cogent's parser.
+Cogent's code generator doesn't have any problem with these transitions. But, since Cogent uses PlantUML for parsing, they are rejected by Cogent's parser.
 
 ### Local vs external transitions
 
@@ -901,8 +965,9 @@ Cogent currently considers all vanilla and chocolate transitions to be external.
 ### Code generation for `after( D )` expression,
 
 Three macros are used to evaluate whether a given duration has passed.
-The macros can be redefined ahead of the generated code if the defaults
+The macros can be redefined in the preamble file (or any file it includeds) if the defaults
 are not suitable.  (I recommend redefining TIME_T to something more portable like `uint16_t`)
+If time is not in milliseconds, then the IS_AFTER macro should be redefined to use the appropriate scale factor on one side or the other of the inequation.
 
 The default definitions are
 
