@@ -46,53 +46,63 @@ The input is a plant UML spec such as
 
 ![First Example](diagrams/firstExample.png)
 
+Here is file `firstExample.puml`
+
 ```
 @startuml
     state IDLE 
     state RUNNING
     state C <<choice>>
     [*] -> IDLE
-    IDLE -> C : go
-    C -> RUNNING : [READY] / start
-    C --> IDLE : [else]
-    RUNNING -> IDLE : kill / stop
-    RUNNING -> IDLE : after(60s) / stop
+    IDLE -> C : GO
+    C -> RUNNING : [ready?] / start
+    C -> IDLE : [else]
+    RUNNING -> IDLE : KILL / stop
+    RUNNING --> IDLE : after(60s) / stop
 @enduml
 ```
 
 Running Cogent with command line
 
 ```
-   scala cogent-assembly-1.0.jar foo first_example.puml first_example.c
+   scala cogent-assembly-1.0.jar firstExample
 ```
-generates a controller in file 'first_example.c' that declares the following procedures.
+generates file `firstExample.c` that looks like this:
 
 ```C
-void initStateMachine_foo( TIME_T now ) 
+#include "firstExample.h"
+
+...
+
+void initStateMachine_firstExample( TIME_T now ) 
 {
     ...
 }
-bool_t dispatchEvent_foo( event_t *event_p, TIME_T now ) {
+bool_t dispatchEvent_firstExample( event_t *event_p, TIME_T now ) {
 {
     ...
 }
 ```
 
-where `foo` is the name of the statechart, obtained from the command line.
-
-This C file can be included into another C file that defines certain prerequisite types, constants, and procedures, discussed below.
+The first ellipsis represents some declarations that are used locally within the file.
 
 As events happen, they should be fed into the generated controller and it will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
 
 ## Prerequisites
 
-The generated code has some prerequisites which need to be supplied. You need to define
+### Required prerequisites
 
-* The `event_t` type. 
-* A function (or function-like macro) `eventClassOf(event_t*)` which produces a member of an enum type. 
-* The members of that type correspond to the triggers in the diagram: In the example above there should be members `go` and `kill`. There should also be a member called `TICK`. 
+The generated code has some prerequisites which need to be supplied. These should be in file named `foo_preamble.h`, where `foo` is the name of the statechart i.e., the first command-line argument.
+
+This file should define or include the declarations of:
+
+* The `event_t` type.
+* A function (or function-like macro) `eventClassOf(event_t*)` which produces a member of an enum type.
+
+The members of the `event_t` type correspond to the triggers in the diagram: In the example above there should be members `go` and `kill`. There should also be a member called `TICK`. 
 
 For example, the following definitions fulfil the requirements above. 
+
 
 ```C
     typedef enum eventClass_e {go, kill, TICK} eventClass_t;
@@ -112,18 +122,18 @@ For example, the following definitions fulfil the requirements above.
     #define eventClassOf(p) ((p)->tag)
 ```
 
-* A type `bool_t` and constants `true` and `false` .
-* A type named `status_t` along with
+* A type `bool_t`,
+* constants `true` and `false`,
+* a type named `status_t` along with
 * a constant (or macro) `OK_STATUS` and
 * a boolean function (or function-like macro) `OK( status_t )`. For example I might declare
 
 ```C
     typedef int16_t status_t ;
     #define OK_STATUS ((int16_t)0)
-    #define OK( s ) ( (s)==OK_STATUS )
 ```
 
-* For each action, there needs to be a function of type `status_t (const event_t *, status_t status)` with the same name as the action. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply functions
+* For each action, there needs to be a procedure (function) of type `status_t (const event_t *, status_t status)` with the same name as the action.  These procedures should be declared in the preamble. The input status is the status of the previous action on the same compound transition or `OK_STATUS` if there is no previous action. For the example above, we would need to supply procedures
 
 ```C
     status_t start(const event_t *, status_t status) {
@@ -136,31 +146,42 @@ For example, the following definitions fulfil the requirements above.
 
 In this particular example, the input status in both cases will be `OK_STATUS`, since `start` and `stop` are the first actions on their compound transitions. In both cases, the output status is ignored since `start` and `stop` are also the last actions on their transitions, and there are no subsequent guards that depend on the status.
 
-* For each guard, there needs to be a function of type `bool_t (const event_t *, status_t)`.  For the example above, we would need
+* For each guard, there needs to be a function of type `bool_t (const event_t *, status_t)`.  These functions should be declared in the preamble. For the example above, we would need
 
 ```C
-    bool_t READY(const event_t *, status_t) {
+    bool_t ready_query(const event_t *, status_t) {
         ...
     }
 ```
 
-
-
 * A macro or function "void assertThat( bool_t )".  This should do nothing if the argument is true. What it does if the argument is false is up to you.
 * A macro or function "void assertUnreachable()".  What this does is up to you.
 
+See folder examples/firstExample for how I would organize these declarations and macro definitions into a set of .h files.
 
-## Defaults
+### Optional prerequisites
 
-Most of these prerequisites can be replaced by placing a macro definition ahead of the code. For example, if you don't have a type bool_t with constants true and false, you can precede the generated code with 
+The following macros are defined in the generated code, you can override these definitions by defining them in the preamble include file.
+
+* TIME_T -- discussed in section "Code generation for `after( D )` expression"
+* TO_DURATION -- discussed in section "Code generation for `after( D )` expression"
+* IS_AFTER -- discussed in section "Code generation for `after( D )` expression"
+* OK -- defaults to #define OK( s ) ( (s)==OK_STATUS )
+* GUARD -- defaults to #define GUARD(name) name
+* ACTION -- defaults to #define ACTION(name) name
+* EVENT -- defaults to #define EVENT(name) name
+
+The last three are useful if you have a nameing system in your code but you don't want to clutter up the diagram with extra charaters.  For example you might define
 
 ```C
-#define bool_t int ; 
-#define true 1 ;
-#define false 0 ;
+    #define EVENT(name) name##_event
+    #define GUARD(name) name##_guard
+    #define ACTION(name) name##_action
 ```
 
-## TICK events
+Now in your C code you use the suffixes, but in the PUML file you leave them off.
+
+## TICK events and the event dispatch loop
 
 TICK events are used to trigger transitions labelled "after( D )" where D is a duration in seconds or milliseconds.  My advice is after every event that makes the controller return true, feed the controller a sequence of TICK events until it returns false.
 
@@ -608,7 +629,7 @@ For any given vertex / trigger combination, the guards on the edges have the fol
 * If a transition out of a state has no guard, then it should be the only edge for that trigger.
 * At most one transition may be labelled with an `[else]` guard.
 * If the vertex is a choice pseudostate and there is no else, then at least one guard must be true. This is not checked until runtime.
-* On the other and, if a state has no else and all guards are false, it is not an error, but it will result in the trigger being ignored.
+* On the other hand, if all transitions out of a state for a particular trigger have guards that evaluate to false, it is not an error, but it will result in the trigger being ignored for that state.
 
 
 #### Action sequences
@@ -621,7 +642,7 @@ A sequence of one or more actions can follow a slash "/". Each action can be fol
 
 #### Actions
 
-Each action is either
+Action can be
 
 *  Named actions: Any C identifier (after substitution) such as "f". This is translated into a function call "status = f( event_p, status );".
 * Any code within braces.  This is copied verbatim into the controller with an extra semicolon tacked on the end. E.g. you could write "{status = 42}" and the generated code will be "{ status = 42 ; }".
@@ -636,7 +657,7 @@ Named triggers, named guards, and named actions allow a few characters not allow
 
 In all cases, the replacement text is preceded by a `_` except at the start of the identifier and followed by a `_` except at the end of an identifier. For example `C?M1` as a trigger becomes `C_RECV_M1`, `?abc` as a guard becomes `query_abc`, and `xyz!?` as an action becomes `xyz_send_recv`.
 
-### Restrictions on transitions.
+### Restrictions and recommendations on transitions.
 
 Transitions come in three flavours
 
@@ -646,7 +667,9 @@ Transitions come in three flavours
 
 Strawberry transitions should not be labelled.
 
-Vanilla transitions should have a trigger.  (If the source state is a simple state, Cogent will rewrite a missing trigger as "after(0s)".)
+Vanilla transitions should have a trigger.
+
+(If the source state is a simple state, Cogent will rewrite a missing trigger as "after(0s)". For compound states, a vanilla transition with no trigger is triggered by the "completion" of its source state, according to the UML standard; however Cogent does not currently support completion events; and so it is currently necessary for such transitions to have an explicit trigger.)
 
 Chocolate transitions must not have a trigger.
 
@@ -668,7 +691,7 @@ A vanilla transition is enabled if its source state is active and:
 
 #### Multiple enabled transitions
 
-When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  For example, if there are guards A, B. The generated code for that state/event pair might look like this:
+When there are multiple enabled transitions out of a state for the event, only one will fire, but the choice is arbitrary and unpredictable (unless you read the code, but that could change, when it is next generated).  The exception is `else` guards, which are always checked last. For example, if there are guards A, B. The generated code for that state/event pair might look like this:
 
 ```C
    status_t status = OK_STATUS ;
@@ -686,7 +709,7 @@ or like this:
    else { /*Do nothing*/ }
 ```
 
-For the set of all edges leaving a given state that are labelled with the same named trigger:
+Therefor, for the set of all edges leaving a given state that are labelled with the same named trigger:
 
 * It is good practice to ensure that at most one guard will be true.
 
@@ -717,7 +740,7 @@ For the set of all transitions leaving a given choice, entrypoint, or exitpoint 
 
 #### Time and guards
 
-If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time. If all are false, the no transition will fire.
+If there are multiple `after` transitions out of a state that all have the same duration, the situation is the same as for multiple transitions on the same event. It is good practice to ensure that no two guards for the same duration can be true at the same time; otherwise there is ambiguity about which should be chosen.
 
 When there are different durations, they are checked in order of increasing duration.  For example if we have
 
@@ -729,7 +752,7 @@ Suppose P is false when 1 ms has passed. The first transition is blocked by P an
 
 At every subsequent `TICK` prior to 20ms, P will be tested.
 
-On the first `TICK` event after the time in A reaches 20 ms, if P is true, the first transition will fire and otherwise the second.
+Assuming that the state remains active for 20ms, on the first `TICK` event after the time in A reaches 20 ms, if P is true, the first transition will fire and otherwise the second.
 
 ### Using status appropriately
 
@@ -906,8 +929,8 @@ If that's not suitable, the macros need to be redefined.
 
 The defaults will work as long as the duration is not too long and the TICK events happen at a reasonable rate.
 
-For example, suppose the `TIME_T` type is 16 bits. Suppose a state is entered when the time is 1 day after time 0. That's 8.64e7 ms. This will be reduced mod 2^16 (= 65,536), which gives 23,552. That will be time `then`. If we need to wait 1 minute, that's 60000 ms. Suppose one minute and 1s goes by before the expression is checked. That means the time will be `now` = (8.64e7+61,000) mod 2^16 = 19,016. Note that `then` is a bigger number than `now`. So the comparison is `(unsigned int)(60000u) <= (unsigned int)(now-then)`, with then and now being of type `unsigned int`, which works out to `60000u <= 61000u`, which is true. If we have a transition labelled with `[SomeConditon]`, that implicitly means `after(0s)aYou can see that with a duration of one minute, the condition needs to be checked within 5.536 seconds of the condition becoming true. So it is a bad idea in this case to have waits of more than about one minute.
+For example, suppose the `unsigned int` type is 16 bits. Suppose a state is entered when the time is 1 day after time 0. That's 8.64e7 ms. This will be reduced mod 2^16 (= 65,536), which gives 23,552. That will be time `then`. If we need to wait 1 minute, that's 60000 ms. Suppose one minute and 1s goes by before the expression is checked. That means the time will be `now` = (8.64e7+61,000) mod 2^16 = 19,016. Note that `then` is a bigger number than `now`. So the comparison is `(unsigned int)(60000u) <= (unsigned int)(now-then)`, with then and now being of type `unsigned int`, which works out to `60000u <= 61000u`, which is true. You can see that with a duration of one minute, the condition needs to be checked within 5.536 seconds of the condition becoming true. So it is a bad idea in this case to have waits of more than about one minute.
 
-If more time is needed, `TIME_T` can be redefined to `uint32_1`. (It would be wise then to redefine `TO_DURATION` to tack `ul` on the end of the number for portability to machines where 32 bits is considered "long".) Then we would be good for durations up to about 2^32 ms or 49.7 days.
+If more time is needed, `TIME_T` can be redefined as `unsigned long int` and `TO_DURATION` to tack `ul` on the end of the number. If that `unsigned long int` type is a 32-bit unsigned type, we would be good for durations up to about 2^32 ms or 49.7 days.
 
 This works because the subtraction of unsigned int from unsigned int gives an unsigned int.  If `TIME_T` were defined as `unsigned short` the story is different, since an unsigned short minus an unsigned short gives an int that might be negative. The conversion back to `TIME_T` should bring that int back to a positive number.

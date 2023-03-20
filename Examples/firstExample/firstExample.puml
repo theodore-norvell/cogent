@@ -4,11 +4,7 @@
     state C <<choice>>
     [*] -> IDLE
     IDLE -> C : GO
-<<<<<<<< HEAD:diagrams/firstExample.puml
-    C -> RUNNING : [READY] / start
-========
     C -> RUNNING : [ready?] / start
->>>>>>>> main:Examples/firstExample/firstExample.puml
     C -> IDLE : [else]
     RUNNING -> IDLE : KILL / stop
     RUNNING --> IDLE : after(60s) / stop

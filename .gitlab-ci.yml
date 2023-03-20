@@ -32,7 +32,7 @@ build:
   script:
     - mkdir bin
     - sbt assembly
-    - mv target/scala-3.1.0/cogent-assembly-1.0.jar bin/${JAR_FILE}
+    - mv target/scala-3.2.0/cogent-assembly-1.0.jar bin/${JAR_FILE}
     - cp bin/${JAR_FILE} bin/${JAR_FILE_LATEST}
   artifacts:
     paths:

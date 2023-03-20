@@ -9,12 +9,15 @@ import scala.jdk.CollectionConverters._
 
 import Logger.Level._
 
+
 object Main :
     def main( args : Array[String] ) : Unit =
-        val logger = new LogToStdError( Logger.Level.Debug )
-        //println( s"args.length is ${args.length}")
-        // for i <- 0 until args.length do
-        //     println( s"args($i) is ${args(i)}")
+        val logger = new LogToStdError( Logger.Level.Info )
+        val commit = gitCommit.gitCommit( )
+        logger.log( Info, s"Cogent version $commit.")
+        println( s"args.length is ${args.length}")
+        for i <- 0 until args.length do
+            println( s"args($i) is ${args(i)}")
         val chartName : String = if( args != null && args.length > 0 ) args(0) else "foo"
         val inFileName : String = if args != null && args.length > 1 then args(1) else chartName + ".puml"
         var outFileName : String = if args != null && args.length > 2 then args(2) else chartName + ".c"

@@ -20,9 +20,13 @@ class Backend( val logger : Logger, val out : COutputter ) :
     private val toDuration = "TO_DURATION"
     private val isAfter = "IS_AFTER"
     private val now = "now"
+    private val eventMacro = "EVENT"
+    private val guardMacro = "GUARD"
+    private val actionMacro = "ACTION"
 
     def generateCCode( stateChart : StateChart, chartName : String ) : Unit = {
-        val root = stateChart.root
+
+        generateInclude( chartName )
 
         generateMacroDeclarations()
 
@@ -47,36 +51,80 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.blankLine 
         out.put( s"${boolType} dispatchEvent_${chartName}( ${eventType} *${eventPointerName}, $timeType $now ) " )
         out.block{
-            out.put( s"${boolType} ${handledArrayName}[ STATE_COUNT ] = {${falseConst}};" )
-            out.endLine
-            generateCodeForState( root, stateChart ) 
+            out.putLine( s"${boolType} ${handledArrayName}[ STATE_COUNT ] = {${falseConst}};" )
+            generateCodeForState( stateChart.root, stateChart ) 
             val rootStateName = stateChart.root.getCName
-            out.put( s"return ${handledArrayName}[ ${globalMacro(root)} ];" )
+            out.put( s"return ${handledArrayName}[ ${globalMacro(stateChart.root)} ];" )
         }
 
         generateEnterAndExitDefs( stateChart )
-        
+    }
+
+    def generateInclude( chartName : String ) : Unit = {
+        out.putLine( s"#include \"${chartName}_preamble.h\"")
+        out.blankLine
     }
 
     def generateMacroDeclarations() : Unit = {
 
         def declMacro( name : String, params : String, definition : String ) : Unit =
             out.putLine( s"#ifndef $name" )
-            out.putLine( s"#define $name$params $definition" )
+            out.indented{ out.putLine( s"#define $name$params $definition" ) }
             out.putLine( "#endif")
             out.blankLine
 
-        declMacro( localIndexType, "", "int" )
         declMacro( timeType, "", "unsigned int")
         declMacro( isAfter, "(d, t0, t1)", "((TIME_T)(d) <= (TIME_T)((t1)-(t0)))")
         declMacro( toDuration, "(x)", "x##u")
+        declMacro( eventMacro, "(name)", "name" )
+        declMacro( guardMacro, "(name)", "name" )
+        declMacro( actionMacro, "(name)", "name" )
+    }
+
+    def generateDefines( stateChart : StateChart ) : Unit = {
+        val stateList = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
+        val orStateList = stateList.filter( _.isOrState )
+        val stateCount = stateList.size
+        val orStateCount = orStateList.size
+        out.putLine( s"#define STATE_COUNT $stateCount")
+        out.put( s"#define OR_STATE_COUNT $orStateCount" )
+        out.blankLine
+        out.comment( "Each state has a unique global index (G_INDEX)" )
+        out.endLine
+        out.comment( "Except the root, each state has a local index (L_INDEX) that is unique among its siblings." )
+        out.endLine
+        out.comment( "Initial states have a local index of 0." )
+        out.endLine
+        out.putLine( s"#define LOCAL_INDEX_T int")
+        var index = 0
+        for state <- stateList do
+            logger.debug( s"State ${state.getFullName} has global index of ${state.getGlobalIndex}.")
+            assert( state.getGlobalIndex == index )
+            assert( state.isOrState == (index < orStateCount) )
+
+            out.putLine( s"#define ${globalMacro(state)} $index")
+            val localIndex = state.getLocalIndex
+            if localIndex >= 0 then 
+                out.put( s"#define ${localMacro(state)} $localIndex")
+            end if
+            out.blankLine
+            index += 1
+        end for
+        val choiceList = stateChart.nodes.filter( _.isChoicePseudostate ).toSeq.sortBy( _.getGlobalIndex )
+        for choice <- choiceList do
+            val localIndex = choice.getLocalIndex
+            out.put( s"#define ${localMacro(choice)} $localIndex")
+            out.blankLine
+            index += 1
+        end for
     }
 
     def generateEnterAndExitDecls( stateChart : StateChart ) : Unit = {
         val states = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
         for state <- states do
             out.put( s"static void ${enterFunctionName(state)} ( $localIndexType, $timeType ) ; "  )
-            out.put( s"static void ${exitFunctionName(state)} ( $localIndexType ) ;" )
+            if state != stateChart.root  then 
+                out.put( s"static void ${exitFunctionName(state)} ( $localIndexType ) ;" )
             out.endLine
     } 
 
@@ -125,89 +173,51 @@ class Backend( val logger : Logger, val out : COutputter ) :
             out.endLine
 
             // Generate the exit routine for the the state.
-            out.put( s"static void ${exitFunctionName(state)} ( $localIndexType childIndex )" )
-            out.block{
-                out.endLine
+            if state != stateChart.root  then 
+                out.putLine( s"static void ${exitFunctionName(state)} ( $localIndexType childIndex )" )
+                out.block{
+                    out.endLine
 
-                state match 
-                    case x @ Node.BasicState( _ ) =>
-                        // There should be nothing more to do
-                    case x @ Node.OrState( _, _ ) =>
-                        // When an Or state is exited: If the transition is from a descendent,
-                        // it will already have been exited.
-                        // But if the transition is from this node or any node above it
-                        // then we must exit the current child.
-                        out.ifComm( "childIndex == -1") {
-                            out.putLine(s"$localIndexType current = currentChild_a[ ${globalMacro(x)} ] ;" )
-                            val defaultChild = startChild( x ) 
-                            out.switchComm(true, "current") {
-                                for child <- x.children.filter( _.isState ) do
-                                    out.caseComm( localMacro(child)) {
-                                            out.put( s"${exitFunctionName(child)}( -1 ) ; ")
-                                    }
-                                    out.endLine
+                    state match 
+                        case x @ Node.BasicState( _ ) =>
+                            // There should be nothing more to do
+                        case x @ Node.OrState( _, _ ) =>
+                            // When an Or state is exited: If the transition is from an descendent,
+                            // it will already have been exited.
+                            // But if the transition is from this node or any node above it
+                            // then we must exit the current child.
+                            out.ifComm( "childIndex == -1") {
+                                out.putLine(s"$localIndexType current = currentChild_a[ ${globalMacro(x)} ] ;" )
+                                val defaultChild = startChild( x ) 
+                                out.switchComm(true, "current") {
+                                    for child <- x.children.filter( _.isState ) do
+                                        out.caseComm( localMacro(child)) {
+                                                out.put( s"${exitFunctionName(child)}( -1 ) ; ")
+                                        }
+                                        out.endLine
+                                }
                             }
-                        }
-                        out.endLine
-                    case x @ Node.AndState( _, _ ) =>
-                        // When an AND state is exited, all of its children will should first
-                        // be exited. If the transition's source is a strict descendant, then
-                        // the region that that source is in should already have been exited.
-                        // So here we exit all the others
-                        for child <- x.children.filter( _.isState ) do
-                            out.ifComm( s"childIndex != ${localMacro(state)} ") {
-                                out.put( s"${exitFunctionName(state)}( -1 ) ; ")
-                            }
-                            out.endLine ;
+                            out.endLine
+                        case x @ Node.AndState( _, _ ) =>
+                            // When an AND state is exited, all of its children will should first
+                            // be exited. If the transition's source is a strict descendant, then
+                            // the region that that source is in should already have been exited.
+                            // So here we exit all the others
+                            for child <- x.children.filter( _.isState ) do
+                                out.ifComm( s"childIndex != ${localMacro(state)} ") {
+                                    out.put( s"${exitFunctionName(state)}( -1 ) ; ")
+                                }
+                                out.endLine ;
 
-                    case _ => assert( false )  
+                        case _ => assert( false )  
 
-                // Exit actions go here
+                    // Exit actions go here
 
-                out.put( s"$isInArrayName[ ${globalMacro(state)} ] = ${falseConst} ;" )
-                out.endLine
-            }
-    } 
-
-    def generateDefines( stateChart : StateChart ) : Unit = {
-        val stateList = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
-        val orStateList = stateList.filter( _.isOrState )
-        val stateCount = stateList.size
-        val orStateCount = orStateList.size
-        out.put( s"#define STATE_COUNT $stateCount")
-        out.endLine
-        out.put( s"#define OR_STATE_COUNT $orStateCount" )
-        out.blankLine
-        out.comment( "Each state has a unique global index (G_INDEX)" )
-        out.endLine
-        out.comment( "Except the root, each state has a local index (L_INDEX) that is unique among its siblings." )
-        out.endLine
-        out.comment( "Initial states have a local index of 0." )
-        out.endLine
-        var index = 0
-        for state <- stateList do
-            logger.debug( s"State ${state.getFullName} has global index of ${state.getGlobalIndex}.")
-            assert( state.getGlobalIndex == index )
-            assert( state.isOrState == (index < orStateCount) )
-
-            out.put( s"#define ${globalMacro(state)} $index")
-            out.endLine
-            val localIndex = state.getLocalIndex
-            if localIndex >= 0 then 
-                out.put( s"#define ${localMacro(state)} $localIndex")
+                    out.putLine( s"$isInArrayName[ ${globalMacro(state)} ] = ${falseConst} ;" )
+                }
             end if
-            out.blankLine
-            index += 1
         end for
-        val choiceList = stateChart.nodes.filter( _.isChoicePseudostate ).toSeq.sortBy( _.getGlobalIndex )
-        for choice <- choiceList do
-            val localIndex = choice.getLocalIndex
-            out.put( s"#define ${localMacro(choice)} $localIndex")
-            out.blankLine
-            index += 1
-        end for
-        
-    }
+    } 
 
 
     def generateCodeForState( state : Node, stateChart : StateChart ) : Unit = {
@@ -260,8 +270,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                     for child <- state.childStates do
                         out.caseComm( localMacro(child)  ) {
                             generateCodeForState( child, stateChart )
-                            out.put( s"${handledArrayName}[ $globalIndexMacro ] = ${handledArrayName}[ ${globalMacro(child)} ] ;")
-                            out.endLine
+                            out.putLine( s"${handledArrayName}[ $globalIndexMacro ] = ${handledArrayName}[ ${globalMacro(child)} ] ;")
                         }
                         out.endLine
                     end for
@@ -289,8 +298,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             for child <- state.childStates do
                 generateCodeForState( child, stateChart )
                 val str = if first then "" else s" ${handledArrayName}[ $globalIndexMacro ] ||"
-                out.put( s"${handledArrayName}[ $globalIndexMacro ] =$str ${handledArrayName}[ ${globalMacro(child)} ] ;")
-                out.endLine
+                out.putLine( s"${handledArrayName}[ $globalIndexMacro ] =$str ${handledArrayName}[ ${globalMacro(child)} ] ;")
                 first = false 
             end for
             
@@ -345,7 +353,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                                 case _ => false
                             }).getOrElse( false ) ) ;
         
-        out.caseComm( name ){
+        out.caseComm( s"$eventMacro($name)" ){
             generateIfsForEdges( Some(name), state, edges, stateChart ) ;
         }
     }
@@ -391,7 +399,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         val locationForMessages = ( s"Vertex ${node.getFullName}" + (if( triggerDescriptionOpt.isEmpty ) "" else s" on trigger '${triggerDescriptionOpt.get}'" ))
         assert( node.isState || node.isChoicePseudostate )
         if( node.isState )
-            out.put( s"${statusType} ${statusVarName} = ${okStatusConstant} ;") ; out.endLine
+            out.putLine( s"${statusType} ${statusVarName} = ${okStatusConstant} ;") 
         val elseGuardedEdges = edges.filter( e => e.guardOpt.map( g => g match{
                                                     case Guard.ElseGuard() => true
                                                     case _ => false } ).getOrElse( false ) ) ;
@@ -412,8 +420,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 assert( edges.size == 1 )
                 val edge = unguardedEdges.head
                 if node.isState then
-                    out.put( s"${handledArrayName}[${globalMacro(node)}] = ${trueConst} ; " ) 
-                    out.endLine
+                    out.putLine( s"${handledArrayName}[${globalMacro(node)}] = ${trueConst} ; " ) 
                 end if
                 generateTransition( edge, stateChart )
         else if elseGuardedEdges.size > 1 then
@@ -434,8 +441,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 val guard = edge.guardOpt.head
                 out.ifComm{ generateGuardExpression( guard, stateChart, node ) }{
                     if node.isState then
-                        out.put( s"${handledArrayName}[${globalMacro(node)}] = ${trueConst} ; " ) 
-                        out.endLine
+                        out.putLine( s"${handledArrayName}[${globalMacro(node)}] = ${trueConst} ; " ) 
                     end if
                     generateTransition( edge, stateChart )
                 }
@@ -450,8 +456,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
             else
                 out.block{
                     logger.warning( s"$locationForMessages has no else guarded transition. If none of the guards are true, the code will crash." )
-                    out.put( "assertUnreachable() ;" )
-                    out.endLine
+                    out.putLine( "assertUnreachable() ;" )
                  }
             end if
         end if
@@ -470,7 +475,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
 
         if( source.isState ) {
             // Exit the source. The -1 means exit all active children as well.
-            out.put( s"${exitFunctionName(source)}( -1 ) ;" ) ; out.endLine
+            out.putLine( s"${exitFunctionName(source)}( -1 ) ;" ) 
         } else {
             assert( source.isChoicePseudostate )
             // If the source is a choice node, then we don't need to exit it.
@@ -480,7 +485,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         var p = stateChart.parentOf( source )
         while( p != leastCommonOr )
             // Exit the ancestor. The parameter means don't also exit this child.
-            out.put( s"${exitFunctionName(p)}( ${localMacro(child)} ) ;" ) ; out.endLine
+            out.putLine( s"${exitFunctionName(p)}( ${localMacro(child)} ) ;" ) 
             child = p
             p = stateChart.parentOf( p )
         // Generate code for the actions
@@ -501,12 +506,12 @@ class Backend( val logger : Logger, val out : COutputter ) :
             child = path.tail.head
             // Enter an ancestor of the target.
             // The parameter here means don't also enter this child.
-            out.put( s"${enterFunctionName(p)}( ${localMacro(child)}, $now ) ;" ) ; out.endLine
+            out.putLine( s"${enterFunctionName(p)}( ${localMacro(child)}, $now ) ;" ) 
             path = path.tail
         if target.isState then
             // Enter the target.
             // The parameter of -1 means enter the child(ren) also.
-            out.put( s"${enterFunctionName(target)}( -1, $now ) ;" ) ; out.endLine
+            out.putLine( s"${enterFunctionName(target)}( -1, $now ) ;" ) 
         else
             assert( target.isChoicePseudostate )
             // For choice pseudostate's there is no enter function.
@@ -531,16 +536,16 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 case Guard.OKGuard() =>
                     if sourceNode.isState then
                         logger.warning( s"Vertex ${sourceNode.getFullName} has an OK guard, but this will always be true at the start of a transition." ) ;
-                        out.put( "${trueConst}" )
+                        out.put( trueConst )
                     else
                         out.put( s"${okMacro}( $statusVarName )" )
                 case Guard.InGuard( name : String ) => 
                     // TODO. Bug! What if the name was changed!
                     out.put( s"${isInArrayName}[ ${globalMacro(name, stateChart)} ]" )
                 case Guard.NamedGuard( name : String ) =>
-                    out.put( s"$name( ${eventPointerName}, ${statusVarName} )" ) 
+                    out.put( s"$guardMacro($name)( ${eventPointerName}, ${statusVarName} )" ) 
                 case Guard.RawGuard( rawCCode : String ) =>
-                    out.put (s"( $rawCCode )")
+                    out.put(s"( $rawCCode )")
                 case Guard.NotGuard( operand : Guard ) =>
                     out.put( "! ") ; gge( operand )
                 case Guard.AndGuard( left : Guard, right : Guard ) =>
@@ -599,11 +604,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.comment( s"Code for action $action." ) ; out.endLine
         action match 
             case Action.NamedAction( name : String ) =>
-                out.put( s"${statusVarName} = ${name}( ${eventPointerName}, $statusVarName ) ;" )
-                out.endLine
+                out.putLine( s"${statusVarName} = $actionMacro($name)( ${eventPointerName}, $statusVarName ) ;" )
             case Action.RawAction( rawCCode : String ) =>
-                out.put( s"{ ${rawCCode} ; }" )
-                out.endLine
+                out.putLine( s"{ ${rawCCode} ; }" )
     }
 
     def needCodeForEvents( state : Node, stateChart : StateChart ) : Boolean = { 
@@ -640,4 +643,5 @@ class Backend( val logger : Logger, val out : COutputter ) :
         assert( node.isState )
         ("enter_" + node.getCName )
     }
+
 end Backend

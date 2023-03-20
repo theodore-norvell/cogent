@@ -42,4 +42,10 @@ class Outputter( val writer : PrintWriter ) :
     def indent : Unit = indentation += 1
 
     def dedent : Unit = {assert( indentation > 0 ) ; indentation -= 1 ; }
+
+    def indented( contents : => Unit) : Unit = {
+        indent
+        contents
+        dedent
+    }
 end Outputter
