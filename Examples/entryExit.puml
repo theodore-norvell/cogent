@@ -1,0 +1,13 @@
+@startuml
+    state A {
+        A : entry x
+        A : exit y;z
+        note "B" as B
+        [*] -> C
+
+        state C
+        C : entry x;y
+        C  : exit z
+
+    }
+@enduml
