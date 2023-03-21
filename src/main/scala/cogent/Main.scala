@@ -35,6 +35,8 @@ object Main :
                 return ()
             else
                 logger.log( Fatal, s"Unrecognized option ${args(argCounter)}" )
+                printHelp(logger)
+                return ()
             end if
             argCounter += 1
         end while
@@ -76,7 +78,7 @@ object Main :
         val blocks = blockList.asScala
         logger.info( "Parsing successful. Extracting statecharts." ) 
         val middleEnd = MiddleEnd( logger ) 
-        val stateChartList = middleEnd.processBlocks( blocks )
+        val stateChartList = middleEnd.processBlocks( blocks, chartName )
         if ! logger.hasFatality then
             if stateChartList.size == 0 then
                 logger.log( Fatal, "No statecharts to process")

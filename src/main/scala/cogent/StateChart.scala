@@ -6,12 +6,13 @@ class StateChart(
         val root : Node,
         val nodes : Set[Node],
         val edges : Set[Edge],
-        val parentMap : Map[Node, Node]
+        val parentMap : Map[Node, Node],
+        val isFirst : Boolean
     ) :
     
     assert( root.isOrState )
 
-    def description = s"Statechart $name at $location"
+    val description = s"${if isFirst then "Statechart" else "Submachine"} $name at $location"
 
     def show : String =
         val rootString = root.show

@@ -1,6 +1,7 @@
 package cogent
 
-import scala.collection.mutable ;
+import scala.collection.mutable
+import scala.util.control.NonLocalReturns._
 
 class Combiner( val logger : Logger ) :
 
@@ -8,7 +9,7 @@ class Combiner( val logger : Logger ) :
     type UseToDefinitionMap = mutable.Map[(StateChart,Node), String]
 
     def combine( stateChartList : List[StateChart] )
-    : Option[StateChart] = {
+    : Option[StateChart] = returning {
         val primaryStateMachine = stateChartList.head
         val len = stateChartList.length
         val submachineDefinitions = stateChartList.slice(1, len)
@@ -34,7 +35,7 @@ class Combiner( val logger : Logger ) :
                                 if defMap(name) == sc then
                                     defMap(name) = scExpandedOpt.head
                         else
-                            return None
+                            throwReturn[Option[StateChart]]( None )
                     val expandedOpt = expand(primaryStateMachine, useToDefMap, defMap, true )
                     expandedOpt
     }
@@ -175,7 +176,8 @@ class Combiner( val logger : Logger ) :
                 newTree,
                 newNodes.toSet,
                 edgesToAdd.toSet,
-                parentMap.toMap )
+                parentMap.toMap,
+                sc.isFirst )
             Some(result)
         else
             None

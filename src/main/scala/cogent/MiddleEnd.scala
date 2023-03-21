@@ -24,12 +24,13 @@ class MiddleEnd(val logger : Logger) :
 
     enum ParentKind{ case AND; case OR; case NONE; }
 
-    def processBlocks( blockList : Iterable[BlockUml] ) : List[StateChart] =
+    def processBlocks( blockList : Iterable[BlockUml], chartName : String ) : List[StateChart] =
+        var isFirst = true
         val listOfOptions = for block <- blockList
-            yield processBlock(block)
+            yield processBlock(block, block==blockList.head, chartName)
         listOfOptions.toList.flatten
 
-    def processBlock( block : BlockUml ) : Option[StateChart] =
+    def processBlock( block : BlockUml, isFirst : Boolean, chartName : String ) : Option[StateChart] =
         val diagram = block.getDiagram()
         // It would be nice to be able to find the diagram name.
         logger.log( Info, s"Processing diagram")
@@ -51,11 +52,11 @@ class MiddleEnd(val logger : Logger) :
             //     logger.debug( it.next().getLocation().toString() )
             // end while
             // logger.debug( "<<<Source lines")
-            constructStateChart( stateDiagram, lineDescription )
+            constructStateChart( stateDiagram, lineDescription, isFirst, chartName )
         case _ => logger.info( s"Diagram at $lineDescription: Diagrams that are not state diagrams are ignored." )
             None
 
-    def constructStateChart( stateDiagram : StateDiagram, lineDescription : String ) : Option[StateChart] =
+    def constructStateChart( stateDiagram : StateDiagram, lineDescription : String, isFirst : Boolean, chartName : String ) : Option[StateChart] =
         // First: recursively walk the tree of PlantUML entities (states and state-like things) in
         // `stateDiagram`.  For each entity we create a corresponding `cogent.Node`.  `entityToNodeMutMap`
         // records a mapping from IEntity objects to `Node` objects.
@@ -89,10 +90,8 @@ class MiddleEnd(val logger : Logger) :
         val edgeSet = edgeMutSet.toSet
         val childrenOfRoot = rootState.asOrState.head.children
         val name =
-            (if childrenOfRoot.length == 1 && childrenOfRoot.head.isOrState then
-                        childrenOfRoot.head.asOrState.head.getFullName
-            else "*main*")
-        val stateChart = StateChart( name, lineDescription, rootState, nodeSet, edgeSet, parentMap )
+            (if isFirst then chartName else if childrenOfRoot.isEmpty then "*unknown*" else childrenOfRoot.head.getFullName)
+        val stateChart = StateChart( name, lineDescription, rootState, nodeSet, edgeSet, parentMap, isFirst )
         logger.log( Debug, stateChart.show )
         return Some( stateChart )
     end constructStateChart
@@ -580,7 +579,7 @@ class MiddleEnd(val logger : Logger) :
                         newEdges += edge
                     end if
         end for
-        StateChart( stateChart.name, stateChart.location, stateChart.root, stateChart.nodes, newEdges.toSet, stateChart.parentMap )
+        StateChart( stateChart.name, stateChart.location, stateChart.root, stateChart.nodes, newEdges.toSet, stateChart.parentMap, stateChart.isFirst )
     end addMissingTriggers
 
 end MiddleEnd
