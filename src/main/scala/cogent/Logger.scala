@@ -1,5 +1,7 @@
 package cogent
 
+import cogent.Logger.Level
+
 object Logger :
     enum Level :
         case Never ;
@@ -10,6 +12,8 @@ object Logger :
 
 trait Logger :
     import Logger.Level._ 
+
+    def setLogLevel( max : Level ) : Unit
 
     def hasFatality : Boolean
 

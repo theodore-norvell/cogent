@@ -12,15 +12,38 @@ import Logger.Level._
 
 object Main :
     def main( args : Array[String] ) : Unit =
-        val logger = new LogToStdError( Logger.Level.Info )
+        val logger : Logger = new LogToStdError( Info )
         val commit = gitCommit.gitCommit( )
         logger.log( Info, s"Cogent version $commit.")
-        println( s"args.length is ${args.length}")
+        var argCounter = 0
+        if args.length == 0 then
+            printHelp( logger )
+            return ()
+        while argCounter < args.length
+            && args(argCounter).startsWith("-")
+        do
+            if args(argCounter) == "--fatal" then
+                logger.setLogLevel( Fatal )
+            else if args(argCounter) == "--warning" then
+                logger.setLogLevel( Warning )
+            else if args(argCounter) == "--info" then
+                logger.setLogLevel( Info )
+            else if args(argCounter) == "--debug" then
+                logger.setLogLevel( Debug )
+            else if args(argCounter) == "--help" then
+                printHelp(logger)
+                return ()
+            else
+                logger.log( Fatal, s"Unrecognized option ${args(argCounter)}" )
+            end if
+            argCounter += 1
+        end while
+        logger.log( Debug, s"args.length is ${args.length}")
         for i <- 0 until args.length do
-            println( s"args($i) is ${args(i)}")
-        val chartName : String = if( args != null && args.length > 0 ) args(0) else "foo"
-        val inFileName : String = if args != null && args.length > 1 then args(1) else chartName + ".puml"
-        var outFileName : String = if args != null && args.length > 2 then args(2) else chartName + ".c"
+            logger.log( Info, s"args($i) is ${args(i)}")
+        val chartName : String = if( args != null && args.length > argCounter ) then args(argCounter) else "foo"
+        val inFileName : String = if args != null && args.length > (argCounter+1) then args(argCounter+1) else chartName + ".puml"
+        var outFileName : String = if args != null && args.length > (argCounter+2) then args(argCounter+2) else chartName + ".c"
         logger.log( Info, s"Chart name:   ${chartName}" )
         logger.log( Info, s"Source file:  ${inFileName}" )
         logger.log( Info, s"Target file:  ${outFileName}" )
@@ -87,4 +110,20 @@ object Main :
                         backend.generateCCode( stateChart, chartName ) 
                         logger.log( Info, "Code generation complete." )
     end main
-end Main
+
+    private def printHelp( logger : Logger ) : Unit = 
+        logger.setLogLevel( Info )
+        logger.info( "Usage: scala cogent.jar [options] chartName [inputFile [outputFile]]" )
+        logger.info( "or   : java -cp cogent.jar [options] chartName [inputFile [outputFile]]" )
+        logger.info( "    inputFile defaults to chartName.puml" )
+        logger.info( "    outputFile defaults to chartName.c" )
+        logger.info( "Options:" )
+        logger.info( "    --fatal   - only fatal errors are reported" )
+        logger.info( "    --warning - fatal and warning errors are reported" )
+        logger.info( "    --info    - fatal, warning and info messages are reported. This is the default." )
+        logger.info( "    --debug   - debug messages are also reported" )
+        logger.info( "    --help    - print this message and exit")
+        logger.info( "To generate png files use:")
+        logger.info( "    java -cp cogent.jar net.sourceforge.plantuml.Run *.puml" )
+    end printHelp
+end Main // Object 

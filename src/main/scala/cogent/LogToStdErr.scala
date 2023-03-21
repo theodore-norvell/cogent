@@ -10,6 +10,9 @@ class LogToStdError( var maxLevel : Logger.Level )
     val FATALCOLOR = "\u001b[91m"
     val ENDCOLOR = "\u001b[0m"
 
+    def setLogLevel( level : Logger.Level ) : Unit =
+        maxLevel = level
+
     def hasFatality = fatalCount > 0
 
     def log( level : Logger.Level,  message : String ) : Unit =
