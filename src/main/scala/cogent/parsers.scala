@@ -9,20 +9,20 @@ object parsers extends RegexParsers:
         parseAll( edgeLabelParser, in)
     end parseEdgeLabel
 
-    def edgeLabelParser : Parser[(Option[Trigger], Option[Guard], Seq[Action] )] =
+    private def edgeLabelParser : Parser[(Option[Trigger], Option[Guard], Seq[Action] )] =
         (trigger ~ optGuard ~ actions) ^^ {case (a~b~c) => (a,b,c)}
     
-    def trigger : Parser[ Option[Trigger]] =
+    private def trigger : Parser[ Option[Trigger]] =
         opt( keyword("after") ~>! "(" ~> duration <~ ")" ^^ (t => Trigger.AfterTrigger(t) )
            | triggerIdent ^^ ( name => Trigger.NamedTrigger( name ) ) )
     
-    def duration : Parser[Double] =
+    private def duration : Parser[Double] =
         number ~ units ^^ {
             case (n ~ "s") => n*1000 
             case (n ~ "ms") => n
         }
     
-    def number : Parser[Double] =
+    private def number : Parser[Double] =
         regex( """[0-9]+(\.[0-9]*)?""".r )
         .flatMap( str =>    try
                                 val d = str.toDouble
@@ -31,43 +31,43 @@ object parsers extends RegexParsers:
                                 err( s"Number format error on $str.") )
                 )
     
-    def units : Parser[String] =
+    private def units : Parser[String] =
       ( keyword("ms")
       | keyword("s")
       | err( "Unit of time must be 's' or 'ms'") )
 
-    def optGuard : Parser[ Option[Guard] ] =
+    private def optGuard : Parser[ Option[Guard] ] =
         opt( literal("[") ~> possiblyElseGuard <~ literal("]") )
 
-    def possiblyElseGuard : Parser[ Guard ] =
+    private def possiblyElseGuard : Parser[ Guard ] =
         ( keyword("else") ^^ ( _ => Guard.ElseGuard() )
         | guard0 )
 
-    def guard0 : Parser[Guard] =
+    private def guard0 : Parser[Guard] =
         guard1.flatMap( moreGuard0 )
 
-    def moreGuard0( gl : Guard ) : Parser[Guard] =
+    private def moreGuard0( gl : Guard ) : Parser[Guard] =
         ( (literal("==>") | keyword("implies") ) ~>! guard0 ^^ (gr => Guard.ImpliesGuard( gl, gr))
         | success( gl )
         )
 
-    def guard1 : Parser[Guard] =
+    private def guard1 : Parser[Guard] =
         guard2.flatMap( moreGuard1 ) 
     
-    def moreGuard1( gl : Guard ) : Parser[Guard] = 
+    private def moreGuard1( gl : Guard ) : Parser[Guard] = 
         (   (keyword("or") | literal("||")) ~>! guard1 ^^ ( gr => Guard.OrGuard(gl, gr) )
         |   success( gl )
         )
 
-    def guard2 : Parser[Guard] =
+    private def guard2 : Parser[Guard] =
         primitiveGuard.flatMap( moreGuard2 ) 
     
-    def moreGuard2( gl  : Guard ) : Parser[Guard] = 
+    private def moreGuard2( gl  : Guard ) : Parser[Guard] = 
         (   (keyword("and") | literal("&&")) ~>! guard2 ^^ ( gr => Guard.AndGuard(gl, gr) )
         |   success( gl )
         )
 
-    def primitiveGuard : Parser[ Guard ] =
+    private def primitiveGuard : Parser[ Guard ] =
         (
             keyword("not") ~>! primitiveGuard ^^ (g => Guard.NotGuard(g))
         |   literal("!") ~>! primitiveGuard ^^ (g => Guard.NotGuard(g))
@@ -79,39 +79,39 @@ object parsers extends RegexParsers:
         |   err( "Expected guard" ) 
         )
 
-    def actions : Parser[ Seq[Action] ] = 
+    private def actions : Parser[ Seq[Action] ] = 
         ( "/" ~>! rep1sep( action, opt(";") )
         | success( Seq.empty[Action] )
         )
     
-    def action : Parser[ Action ] =
+    private def action : Parser[ Action ] =
         (   actionIdent ^^ (name => Action.NamedAction(name) )
         | literal("{") ~>! cCode <~ literal("}") ^^ (str => Action.RawAction(str))
         | failure("expected action") // Needs to be failure rather than err because action is used in rep1sep
         )
 
-    def triggerIdent : Parser[ String ] =
+    private def triggerIdent : Parser[ String ] =
         ident("?") ^^ sub("?", "RECV")
     
-    def guardIdent : Parser[ String ] =
+    private def guardIdent : Parser[ String ] =
         ident("?") ^^ sub("?", "query") 
     
-    def actionIdent : Parser[ String ] =
+    private def actionIdent : Parser[ String ] =
         ident("?!") ^^ (sub("?", "recv") compose sub("!", "send"))
     
-    def stateIdent : Parser[ String ] =
+    private def stateIdent : Parser[ String ] =
         ident("")
 
-    def ident(others:String) : Parser[ String ] =
+    private def ident(others:String) : Parser[ String ] =
         regex( ("[a-zA-Z_"+others+"][a-zA-Z_0-9"+others+"]*").r )
 
-    def keyword( kw : String) : Parser[ String ] =
+    private def keyword( kw : String) : Parser[ String ] =
         regex("""[a-zA-Z_]\w*""".r).filter( str => str.equals(kw))
     
-    def cCode : Parser[String] =
+    private def cCode : Parser[String] =
         regex( """[^}]*""".r )
     
-    def sub( pat : String, repl : String) : String => String = 
+    private def sub( pat : String, repl : String) : String => String = 
         (target : String) => {
             if target == pat then
                 repl

@@ -813,10 +813,11 @@ This is a bad idea.  The condition will be tested with every `TICK` event.
 The recommended way of setting up driver code will pump in TICK events until there is a TICK event that does not cause a transition.
 So, depending on how the driver code is set up, this may cause an infinite loop in the driver code.
 
-In Killick-1 the driver code (currently) pumps in a new TICK event 1ms after any handled event.
-So this won't create an infinite loop, but it will cause polling
-every 1ms.
+In Killick-1 the driver code (currently) pumps in a new TICK event 1ms after any handled event and after 100 such tick events it checks the main event queue.
+So this won't create an infinite loop, unless the condition never becomes true, but it will cause polling every 1ms.
 Example 0 or example 2 are probably a better approach.
+
+In general, it is a bad idea to have any cycle of edges on which every trigger is `after(0ms)`.
 
 ### Using status appropriately
 

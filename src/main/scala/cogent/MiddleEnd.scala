@@ -372,7 +372,14 @@ class MiddleEnd(val logger : Logger) :
                 val targetNode = entityToNodeMap.apply( target )
                 val label = link.getLabel()
                 val labelAsString = display2String( label ) 
-                val result : parsers.ParseResult[(Option[Trigger], Option[Guard], Seq[Action] )] =  parsers.parseEdgeLabel(labelAsString)
+                var result : parsers.ParseResult[(Option[Trigger], Option[Guard], Seq[Action] )] =
+                    try
+                        parsers.parseEdgeLabel(labelAsString)
+                    catch (e : Throwable) =>
+                        // This shouldn't happen, but if it does, we want to know what happened.
+                        val message = s"Unexpected exception ${e.toString} while parsing edge label <<${labelAsString}>>."
+                        parsers.Error( message, null )
+                    end try
                 logger.log( Debug, s"Parser input <<${labelAsString}>>")
                 logger.log( Debug, s"Parser result ${result}.")
                 val edge = result match
