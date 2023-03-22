@@ -197,7 +197,7 @@ class Combiner( val logger : Logger ) :
             if node.getStereotype != Stereotype.Submachine then
                 logger.warning( s"${sc.description}. State ${node.getFullName} appears to be a submachine reference, but does not have the <<submachine>> stereotype.")
             val definition = defMap( useToDefMap((sc,node)) )
-            logger.info( s"${sc.description}. Node ${node.getFullName} will be expanded using submachine ${definition.description}")
+            logger.info( s"${sc.description}. Node ${node.getFullName} will be expanded using ${definition.description}")
             replace( node, sc, definition, edgesToAdd, newNodes, nodeMap )
             // replace should have added all nodes copied from the definition to
             // the newNodes set and the nodeMap map also new edges in terms of new

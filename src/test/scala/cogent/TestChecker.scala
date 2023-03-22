@@ -12,7 +12,7 @@ class TestChecker extends AnyFlatSpec :
         val parentMap : Map[Node,Node] = Map( (otherNode -> rootNode ) )
         val nodes : Set[Node] = Set(rootNode, otherNode)
         val edges : Set[Edge] = Set()
-        val stateChart = new StateChart( "*main*", "line 32", rootNode, nodes, edges, parentMap )
+        val stateChart = new StateChart( "*main*", "line 32", rootNode, nodes, edges, parentMap, true )
         val middle = MiddleEnd(logger)
         middle.setCNames( stateChart )
         assert( otherNode.getCName == "fred" && rootNode.getCName == "fred_0"
@@ -34,7 +34,7 @@ class TestChecker extends AnyFlatSpec :
         val parentMap : Map[Node,Node] = Map(children map {n=> (n->rootNode)} : _*)
         val nodes : Set[Node] = Set(rootNode) union children.toSet
         val edges : Set[Edge] = Set()
-        val stateChart = new StateChart( "*main*", "line 23", rootNode, nodes, edges, parentMap )
+        val stateChart = new StateChart( "*main*", "line 23", rootNode, nodes, edges, parentMap, true )
         val middle = MiddleEnd(logger)
         middle.setCNames( stateChart )
         assert( w.getCName == "S")
