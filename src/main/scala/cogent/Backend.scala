@@ -23,6 +23,10 @@ class Backend( val logger : Logger, val out : COutputter ) :
     private val eventMacro = "EVENT"
     private val guardMacro = "GUARD"
     private val actionMacro = "ACTION"
+    private val logActionStartMacro = "LOG_ACTION_START"
+    private val logActionDoneMacro = "LOG_ACTION_DONE"
+    private val logEnterStateMacro = "LOG_ENTER_STATE"
+    private val logExitStateMacro = "LOG_EXIT_STATE"
 
     def generateCCode( stateChart : StateChart, chartName : String ) : Unit = {
 
@@ -79,6 +83,11 @@ class Backend( val logger : Logger, val out : COutputter ) :
         declMacro( eventMacro, "(name)", "name" )
         declMacro( guardMacro, "(name)", "name" )
         declMacro( actionMacro, "(name)", "name" )
+        declMacro( logActionStartMacro, "(actionString)", "{}" )
+        declMacro( logActionDoneMacro, "(actionString)", "{}" )
+        declMacro( logEnterStateMacro, "(actionString)", "{}" )
+        declMacro( logExitStateMacro, "(actionString)", "{}" )
+
     }
 
     def generateDefines( stateChart : StateChart ) : Unit = {
@@ -131,6 +140,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
     def generateEnterAndExitDefs( stateChart : StateChart ) : Unit = {
         val states = stateChart.nodes.filter( _.isState ).toSeq.sortBy( _.getGlobalIndex )
         for state <- states do
+            val nameString = out.stringify(state.getFullName)
             out.blankLine
             // Generate the enter routine for the the state.
             out.put( s"static void ${enterFunctionName(state)} ( $localIndexType childIndex, $timeType $now ) "  )
@@ -144,6 +154,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                         out.putLine( s"$currentChildArrayName[ ${globalMacro(parent)} ] = ${localMacro(state)} ;" ) 
 
                 // Entry actions go here.
+                out.putLine( s"$logEnterStateMacro( $nameString )" )
 
                 state match 
                     case x @ Node.BasicState( _ ) =>
@@ -212,6 +223,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                         case _ => assert( false )  
 
                     // Exit actions go here
+                    out.putLine( s"$logExitStateMacro( $nameString )" )
 
                     out.putLine( s"$isInArrayName[ ${globalMacro(state)} ] = ${falseConst} ;" )
                 }
@@ -604,9 +616,14 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.comment( s"Code for action $action." ) ; out.endLine
         action match 
             case Action.NamedAction( name : String ) =>
+                out.putLine( s"${logActionStartMacro}( \"${name}\")" )
                 out.putLine( s"${statusVarName} = $actionMacro($name)( ${eventPointerName}, $statusVarName ) ;" )
+                out.putLine( s"${logActionDoneMacro}( \"${name}\")" )
             case Action.RawAction( rawCCode : String ) =>
+                val cString = out.stringify( s"{ ${rawCCode} ; }" )
+                out.putLine( s"${logActionStartMacro}({ $cString })" ) 
                 out.putLine( s"{ ${rawCCode} ; }" )
+                out.putLine( s"${logActionDoneMacro}({ $cString })" ) 
     }
 
     def needCodeForEvents( state : Node, stateChart : StateChart ) : Boolean = { 

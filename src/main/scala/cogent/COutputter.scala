@@ -60,4 +60,29 @@ class COutputter( override val writer : PrintWriter ) extends Outputter( writer 
         put( "if( " ) ; expr ; put( s" )" )
         block( contents, false )
     }
+
+    def stringify( str : String ) : String = {
+        val sb = new StringBuilder()
+        sb.append( "\"" )
+        for c <- str do
+            c match
+                case '\n' => sb.append( "\\n" )
+                case '\t' => sb.append( "\\t" )
+                case '\r' => sb.append( "\\r" )
+                case '\\' => sb.append( "\\\\" )
+                case '"' => sb.append( "\\\"" )
+                case _ =>
+                    val codePoint = c.toInt
+                    if 32 <= codePoint && codePoint < 127 then
+                        sb.append( c )
+                    else
+                        // Perhaps not perfect but good enough
+                        sb.append( "\\x" )
+                        sb.append( codePoint.toHexString )
+                    end if
+            end match
+        end for
+        sb.append( "\"" )
+        sb.toString
+    }
 end COutputter

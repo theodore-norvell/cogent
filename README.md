@@ -181,6 +181,19 @@ The last three are useful if you have a nameing system in your code but you don'
 
 Now in your C code you use the suffixes, but in the PUML file you leave them off.
 
+### Tracing
+
+The behaviour of the generated code can be traced by defining the following macros
+
+* LOG_ACTION_START( str )
+* LOG_ACTION_DONE( str )
+* LOG_ENTER_STATE( str )
+* LOG_EXIT_STATE( str )
+
+In each case the result should be a single complete statement.  The default definition in each case is the
+do-nothing command {}. The argument
+in each case will be a string literal.
+
 ## TICK events and the event dispatch loop
 
 TICK events are used to trigger transitions labelled "after( D )" where D is a duration in seconds or milliseconds.  My advice is after every event that makes the controller return true, feed the controller a sequence of TICK events until it returns false.
