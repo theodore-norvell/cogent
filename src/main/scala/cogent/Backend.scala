@@ -215,8 +215,8 @@ class Backend( val logger : Logger, val out : COutputter ) :
                             // the region that that source is in should already have been exited.
                             // So here we exit all the others
                             for child <- x.children.filter( _.isState ) do
-                                out.ifComm( s"childIndex != ${localMacro(state)} ") {
-                                    out.put( s"${exitFunctionName(state)}( -1 ) ; ")
+                                out.ifComm( s"childIndex != ${localMacro(child)} ") {
+                                    out.put( s"${exitFunctionName(child)}( -1 ) ; ")
                                 }
                                 out.endLine ;
 
