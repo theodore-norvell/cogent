@@ -407,7 +407,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.endLine
     }
 
-    def generateIfsForEdges( triggerDescriptionOpt : Option[String], node : Node, edges : Set[Edge], stateChart : StateChart) : Unit = {
+    def generateIfsForEdges( triggerDescriptionOpt : Option[String], node : Node, edges : Seq[Edge], stateChart : StateChart) : Unit = {
         val locationForMessages = ( s"Vertex ${node.getFullName}" + (if( triggerDescriptionOpt.isEmpty ) "" else s" on trigger '${triggerDescriptionOpt.get}'" ))
         assert( node.isState || node.isChoicePseudostate )
         if( node.isState )
@@ -415,9 +415,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
         val elseGuardedEdges = edges.filter( e => e.guardOpt.map( g => g match{
                                                     case Guard.ElseGuard() => true
                                                     case _ => false } ).getOrElse( false ) ) ;
-        val nonElseGuardedEdges = (edges -- elseGuardedEdges)
+        val nonElseGuardedEdges = edges.filter( e => ( elseGuardedEdges.contains(e) .unary_! ) )
         val unguardedEdges = nonElseGuardedEdges.filter( e => e.guardOpt.isEmpty )
-        val conditionalEdges = (nonElseGuardedEdges -- unguardedEdges)
+        val conditionalEdges = nonElseGuardedEdges.filter( e => (unguardedEdges.contains(e).unary_!) )
         assert(elseGuardedEdges.size + unguardedEdges.size + conditionalEdges.size == edges.size)
         if unguardedEdges.size > 1 then 
             // Case: There too many (more than 1) else-guarded edges, too many unguarded edges, or too many of both.

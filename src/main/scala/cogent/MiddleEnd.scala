@@ -579,7 +579,7 @@ class MiddleEnd(val logger : Logger) :
                         newEdges += edge
                     end if
         end for
-        StateChart( stateChart.name, stateChart.location, stateChart.root, stateChart.nodes, newEdges.toSet, stateChart.parentMap, stateChart.isFirst )
+        StateChart( stateChart.name, stateChart.location, stateChart.root, stateChart.nodeSet, newEdges.toSet, stateChart.parentMap, stateChart.isFirst )
     end addMissingTriggers
 
 end MiddleEnd
