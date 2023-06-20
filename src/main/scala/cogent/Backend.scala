@@ -28,7 +28,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
     private val logEnterStateMacro = "LOG_ENTER_STATE"
     private val logExitStateMacro = "LOG_EXIT_STATE"
 
-    def generateCCode( stateChart : StateChart, chartName : String ) : Unit = {
+    def generateCCode( stateChart : StateChart, chartName : String, cogentVersion : String ) : Unit = {
+
+        generateComment( cogentVersion)
 
         generateInclude( chartName )
 
@@ -62,6 +64,12 @@ class Backend( val logger : Logger, val out : COutputter ) :
         }
 
         generateEnterAndExitDefs( stateChart )
+    }
+
+    def generateComment( cogentVersion : String ) : Unit = {
+        val dateStr = java.time.ZonedDateTime.now.toString() 
+        out.comment( s"Generated $dateStr by\n   Cogent version $cogentVersion" )
+        out.blankLine
     }
 
     def generateInclude( chartName : String ) : Unit = {
