@@ -109,7 +109,7 @@ object Main :
                         import java.io.PrintWriter
                         val cout = COutputter( new PrintWriter( outFile ) )
                         val backend = Backend( logger, cout )
-                        backend.generateCCode( stateChart, chartName ) 
+                        backend.generateCCode( stateChart, chartName, commit ) 
                         logger.log( Info, "Code generation complete." )
     end main
 

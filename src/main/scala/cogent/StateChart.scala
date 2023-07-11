@@ -4,13 +4,17 @@ class StateChart(
         val name : String,
         val location : String,
         val root : Node,
-        val nodes : Set[Node],
-        val edges : Set[Edge],
+        val nodeSet : Set[Node],
+        val edgeSet : Set[Edge],
         val parentMap : Map[Node, Node],
         val isFirst : Boolean
     ) :
     
     assert( root.isOrState )
+
+    val nodes : Seq[Node] = nodeSet.toSeq.sortBy( _.getFullName )
+
+    val edges : Seq[Edge] = edgeSet.toSeq.sortBy( _.toString )
 
     val description = s"${if isFirst then "Statechart" else "Submachine"} $name at $location"
 

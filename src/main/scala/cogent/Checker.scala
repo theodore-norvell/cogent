@@ -84,7 +84,7 @@ class Checker( val logger : Logger ) :
         // starts at a state and ends at a state.
         val edges = edgesOnPaths( stateChart )
         val edgesFromStart = stateChart.edges.filter( e => e.source.isStartMarker )
-        val edgesNotOnPaths = stateChart.edges -- edges -- edgesFromStart
+        val edgesNotOnPaths = stateChart.edgeSet -- edges -- edgesFromStart
         for e <- edgesNotOnPaths do
             logger.log( Warning, s"Edge $e is not reachable from any state")
     }
@@ -94,7 +94,7 @@ class Checker( val logger : Logger ) :
         // At the same time we check paths that start at a state, then reach a 
         // nonstate node and then cycle back to that nonstate node.
         val setOfSetOfEdges =
-            for node <- stateChart.nodes
+            for node <- stateChart.nodeSet
                 if node.isState
                 yield edgesOnPaths( node, stateChart, Set[Node]() )
         setOfSetOfEdges.flatten
