@@ -78,7 +78,7 @@ or
 generates file `firstExample.c` that looks like this:
 
 ```C
-#include "firstExample.h"
+#include "firstExample_preamble.h"
 
 ...
 
