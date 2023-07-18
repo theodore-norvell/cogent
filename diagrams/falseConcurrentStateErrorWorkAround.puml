@@ -1,0 +1,15 @@
+@startuml FalseConcurrentStateErrorWorkaround
+state FalseConcurrentStateErrorWorkaround {
+    state A
+    [*] -> A
+    --
+    state B {
+        state B0
+        state B1 {
+            state C
+        }
+        C -> B0
+    }
+    [*] --> B
+}
+@enduml

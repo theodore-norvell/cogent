@@ -1,0 +1,12 @@
+@startuml TrueConcurrentStateErrorExample
+    state A
+    state B {
+        state B0
+        --
+        state B1
+    }
+    state C
+    [*] -> A
+    A -> B0
+    B1 -> C
+@enduml
