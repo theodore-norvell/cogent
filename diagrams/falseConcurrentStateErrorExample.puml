@@ -1,0 +1,11 @@
+@startuml FalseConcurrentStateErrorExample
+state FalseConcurrentStateErrorExample {
+    state A
+    --
+    state B0
+    state B1 {
+        state C
+    }
+    C --> B0
+}
+@enduml

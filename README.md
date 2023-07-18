@@ -62,15 +62,23 @@ Here is file `firstExample.puml`
 @enduml
 ```
 
-Running Cogent with command line
+### Running Cogent with command line
 
+You can run cogent using either the `scala` command or the `java` command: either
+
+```shell
+   scala cogent.jar firstExample
 ```
-   scala cogent-assembly-1.0.jar firstExample
-```
+
+or
+
+```shell
+   java -cp cogent.jar cogent.Main firstExample
+`````
 generates file `firstExample.c` that looks like this:
 
 ```C
-#include "firstExample.h"
+#include "firstExample_preamble.h"
 
 ...
 
@@ -87,6 +95,40 @@ bool_t dispatchEvent_firstExample( event_t *event_p, TIME_T now ) {
 The first ellipsis represents some declarations that are used locally within the file.
 
 As events happen, they should be fed into the generated controller and it will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
+
+### Making images and finding parsing error messages with cogent.jar
+
+Because cogent.jar contains the PlantUML program, as well as cogent, you use it to make PNG images like this
+
+```shell
+    java -cp cogent.jar net.sourceforge.plantuml.Run firstExample.puml
+```
+
+I strongly recommend doing this first because PlantUML gives better error messages than cogent for any parsing errors.
+
+If there are any parsing errors there should be a short message
+at the command line, but a detailed error message,
+will show up in the PNG file(s).
+
+Better yet, while editing any PUML files, I just leave PlantUML working in the background.  You can do that with this bash command.
+
+```shell
+    java -cp cogent.jar net.sourceforge.plantuml.Run &
+```
+
+That should create a GUI window like this
+
+![PlantUML window](diagrams/PlantUML-window.jpg)
+
+Use the "Change Directory" button to change the directory being watched to the one that contains your PUML file.
+Then you can edit your PUML file and the PNG file(s) will be updated automatically whenever the PUML file is saved.
+Again, any parsing errors will be reported in the PNG file(s),
+which will can also be viewed using PlantUML's graphical UI.
+
+
+
+Then ensure that the directory that contains your PUML file is the one that PlantUML is watching.
+
 
 ## Prerequisites
 
@@ -247,7 +289,6 @@ then the following code could be executed periodically
     }
 ```
 
-
 ## Details
 
 ### States and pseudostates
@@ -338,6 +379,87 @@ Composite states may have multiple regions; this allows for a form of concurrenc
 ```
 
 Cogent will make up names for the regions, like `A_region_0` and `A_region_1`. Currently these might be in any order and the order might vary from run to run of the program.
+
+#### Restrictions on Composite states with multiple regions
+
+PlantUML imposes a couple of restrictions on composite states with multiple regions.
+
+##### No transitions into or out of concurrent regions
+
+One is that there can be no transitions into or out of any of the regions.
+
+So this is not allowed
+
+```PlantUML
+@startuml TrueConcurrentStateErrorExample
+    state A
+    state B {
+        state B0
+        --
+        state B1
+    }
+    state C
+    [*] -> A
+    A -> B0
+    B1 -> C
+@enduml
+```
+
+The edge `A -> B0` gives the error message
+
+> The state B0 has been created in a concurrent state : it cannot be used here.
+
+And if that transition were removed, the transition `B1 -> C` gives a similar error message.
+
+The reason is that PlantUML separately renders each region within a composite state, when there is more than one.
+
+##### No transitions from a state in a concurrent region to a substate in a the same region.
+
+This one I don't understand, but at least I have a work around.  Here is an example
+
+```PlantUML
+@startuml FalseConcurrentStateErrorExample
+state FalseConcurrentStateErrorExample {
+    state A
+    [*] -> A
+    --
+    state B0
+    state B1 {
+        state C
+    }
+    C -> B0
+}
+@enduml
+```
+
+The transition from `C --> B0` gives the error:
+
+> The state C has been created in a concurrent state : it cannot be used here.
+
+I think this is a bug in PlantUML.
+
+Here is a workaround. Put all states in the the concurrent region inside of a composite state like this.
+
+```PlantUML
+@startuml FalseConcurrentStateErrorWorkaround
+state FalseConcurrentStateErrorWorkaround {
+    state A
+    [*] -> A
+    --
+    state B {
+        state B0
+        state B1 {
+            state C
+        }
+        C -> B0
+    }
+    [*] --> B
+}
+@enduml
+```
+
+![Workaround]( diagrams/FalseConcurrentStateErrorWorkaround.png )
+
 
 #### How Cogent sees states
 
@@ -775,10 +897,10 @@ Example 0:
 ```
     state A
     state B
-    A -> B : after(0ms) [condition] / action
+    A -> B : after(0ms) [guard] / action
 ```
 
-When A is active, the condition will be tested with every `TICK` event.
+When A is active, the guard will be tested with every `TICK` event.
 
 In Killick-1 this will poll at a rate of once every 10ms. (Currently.)
 
@@ -787,12 +909,12 @@ Example 1:
 ```
     state A
     state B
-    A -> B : after(1s) [condition] / action
+    A -> B : after(1s) [guard] / action
 ```
 
 This might not mean what you think.
-When A has been active for 1s the condition will then be tested.
-If the condition is false at that time, the condition will then be tested with every `TICK` event. So 1s is a minimum wait time, but the after that the transition will be tested frequently.
+When A has been active for 1s the guard will then be tested.
+If the guard is false at that time, the guard will then be tested with every `TICK` event. So 1s is a minimum wait time, but the after that the transition will be tested frequently.
 
 In Killick-1 this will poll at a rate of once every 10ms. (Currently.)
 
@@ -803,13 +925,13 @@ Example 2:
     state B
     state C <<choice>>
     A -> C : after(1s) 
-    C -> B : [condition] / action
+    C -> B : [guard] / action
     C -> A : [else]
 ```
 
-In this case, state A will be re-entered after 1s. This resets the entry time for state A, and so the condition will be tested once per second.
+In this case, state A will be re-entered after 1s. This resets the entry time for state A, and so the guard will be tested once per second.
 
-Thus the condition will be polled once per second.
+Thus the guard will be polled once per second.
 
 Example 3:
 
@@ -818,16 +940,16 @@ Example 3:
     state B
     state C <<choice>>
     A -> C : after(0ms) 
-    C -> B : [condition] / action
+    C -> B : [guard] / action
     C -> A : [else]
 ```
 
-This is a bad idea.  The condition will be tested with every `TICK` event.  
+This is a bad idea.  The guard will be tested with every `TICK` event.  
 The recommended way of setting up driver code will pump in TICK events until there is a TICK event that does not cause a transition.
 So, depending on how the driver code is set up, this may cause an infinite loop in the driver code.
 
 In Killick-1 the driver code (currently) pumps in a new TICK event 1ms after any handled event and after 100 such tick events it checks the main event queue.
-So this won't create an infinite loop, unless the condition never becomes true, but it will cause polling every 1ms.
+So this won't create an infinite loop, unless the guard never becomes true, but it will cause polling every 1ms.
 Example 0 or example 2 are probably a better approach.
 
 In general, it is a bad idea to have any cycle of edges on which every trigger is `after(0ms)`.

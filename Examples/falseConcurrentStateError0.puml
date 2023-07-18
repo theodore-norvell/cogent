@@ -1,0 +1,13 @@
+@startuml FalseConcurrentStateError0
+state FalseConcurrentStateError0 {
+    state CheckPowerAvailability
+    --
+    'state MainADCSState {
+        state ErrorLogging
+        state PowerRecovery {
+            state PowerRecoveryErrorEntry <<entrypoint>>
+        }
+        ErrorLogging --> PowerRecoveryErrorEntry
+    '}
+}
+@enduml
