@@ -416,6 +416,40 @@ class Backend( val logger : Logger, val out : COutputter ) :
     }
 
     def generateIfsForEdges( triggerDescriptionOpt : Option[String], node : Node, edges : Seq[Edge], stateChart : StateChart) : Unit = {
+        // Note that this function is used for the collection of all edges
+        // out of a choice node, but also for the collection of all edges
+        // out of a state that have the same trigger.  This leads to
+        // several problems that I can see.
+        // The first is that it makes
+        // it difficult to warn about the use of an else on a transition out 
+        // of a state.  For example if we have
+        //      T [p]         T [else] 
+        //  B <---------A----------------> C
+        // this is treated as if there were a transition to a choice node
+        // like this 
+        //       [p]            [else]
+        //  B <--------- <>--------------> C
+        //                ^
+        //                | T
+        //                A
+        // So illegitimate machines are treated the same as legitimate machines.
+        // The first is mitigated by making a warning during checking.
+        //
+        // The second is similar.
+        //      T [p]         T [q] 
+        //  B <---------A----------------> C
+        // This is treated the same as
+        //       [p]            [q]
+        //  B <--------- <>--------------> C
+        //                ^
+        //                | T
+        //                A
+        //  But these have different meanings. In the first,
+        //  the machine should do nothing when both p and q are false.
+        //  The second is "ill-formed" when both p and q are false.
+        //  This problem is addressed in an ad-hoc way by the code
+        //  generator. Below.
+
         val locationForMessages = ( s"Vertex ${node.getFullName}" + (if( triggerDescriptionOpt.isEmpty ) "" else s" on trigger '${triggerDescriptionOpt.get}'" ))
         assert( node.isState || node.isChoicePseudostate )
         if( node.isState )
@@ -428,7 +462,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
         val conditionalEdges = nonElseGuardedEdges.filter( e => (unguardedEdges.contains(e).unary_!) )
         assert(elseGuardedEdges.size + unguardedEdges.size + conditionalEdges.size == edges.size)
         if unguardedEdges.size > 1 then 
-            // Case: There too many (more than 1) else-guarded edges, too many unguarded edges, or too many of both.
+            // Case: More than one unguarded edges.
             logger.fatal( s"$locationForMessages has more than one transition with no guard." )
         else if unguardedEdges.size == 1 then
             // Case: There is one unguarded edge ...
@@ -444,6 +478,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 end if
                 generateTransition( edge, stateChart )
         else if elseGuardedEdges.size > 1 then
+            // Case: There are no unguarded edges, but there are multiple else-guarded edges.
             logger.fatal( s"$locationForMessages multiple transitions guarded by 'else'." )
         else
             // Case there are no unguarded edges and at most 1 else-guarded edges
@@ -455,6 +490,9 @@ class Backend( val logger : Logger, val out : COutputter ) :
             //  Overlap -- there exists a state where 2 or more guards could both be true
             //  Underlap -- there exists a state where all guards are false and there is no else. (This would be info for states and warning for branch nodes)
             //  Pointless else -- in all states at least one guard is true, but there is an else.
+            // Of course the best we can do is look for propositional tautologies.
+            //   Overlap could exist unless !(P and Q) is a tautology.
+            //   Underlap could exist unless (P or Q or R ...) is a tautology.
 
             // For each edge that is not guarded by an else, output "if(...) {...} else "
             for edge <- conditionalEdges do

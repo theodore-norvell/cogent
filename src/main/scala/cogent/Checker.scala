@@ -21,6 +21,7 @@ class Checker( val logger : Logger ) :
         checkAllEdgesReachable( stateChart )
         checkAllEdgesOutOfStatesHaveTriggers( stateChart )
         checkOnlyEdgesOutOfStatesHaveTriggers( stateChart )
+        checkEdgesOutOfStatesHaveNoElseGuards( stateChart )
         // Other things to check:
         // (a) Define a bundle to be a set of all transitions out
         //     of a state that have the same trigger or a set of
@@ -130,6 +131,20 @@ class Checker( val logger : Logger ) :
         for e <- edgesFromNonStates do
             if ! e.triggerOpt.isEmpty then
                 logger.fatal( s"Edge $e has a trigger. Only edges out of states may have triggers." )
+    }
+
+
+    def checkEdgesOutOfStatesHaveNoElseGuards(  stateChart : StateChart ) : Unit = {
+        val edgesFromNonStates = stateChart.edges.filter( e => ! e.source.isState )
+        for e <- edgesFromNonStates do
+            if ! e.guardOpt.isEmpty then
+                e.guardOpt.get match {
+                    case Guard.ElseGuard() =>
+                        logger.warning( s"Edge $e exits a state, but is guarded by an 'else'. It will be interpreted as the default transition among all transitions that have the same trigger." )
+                    case _ => ()
+                }
+            end if
+        end for
     }
 
 
