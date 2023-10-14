@@ -39,14 +39,15 @@ It would be good to be familiar with the StateChart formalism.  I have a short g
 
 > [docs/StateCharts/StateCharts.md](docs/StateCharts/StateCharts.md)
 
+Cogent uses a subset of PlantUML as it's input language.
+Information on PlantUML can be found at 
+
+> [plantuml.com/state-diagram](https://plantuml.com/state-diagram).
+
 
 ## Example
 
-The input is a plant UML spec such as
-
-![First Example](diagrams/firstExample.png)
-
-Here is file `firstExample.puml`
+The input is a PlantUML file such as this one called `firstExample.puml`.
 
 ```
 @startuml
@@ -62,6 +63,9 @@ Here is file `firstExample.puml`
 @enduml
 ```
 
+
+![First Example](diagrams/firstExample.png)
+
 ### Running Cogent with command line
 
 You can run cogent using either the `scala` command or the `java` command: either
@@ -74,8 +78,11 @@ or
 
 ```shell
    java -cp cogent.jar cogent.Main firstExample
-`````
-generates file `firstExample.c` that looks like this:
+```
+
+generates file `firstExample.c`.
+
+Here is that file with a few parts left out:
 
 ```C
 #include "firstExample_preamble.h"
@@ -94,7 +101,9 @@ bool_t dispatchEvent_firstExample( event_t *event_p, TIME_T now ) {
 
 The first ellipsis represents some declarations that are used locally within the file.
 
-As events happen, they should be fed into the generated controller and it will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
+The `initStateMachine_firstExample` procedure should be called once to initialize the controller.
+
+As events happen, they should be fed into the generated controller by calling the `dispatchEvent_firstExample` procedure. The controller will react by changing its own state and executing actions.  The result of the controller is `true` if the event was handled and `false` if the event was ignored. In our example, `kill` events are ignored when the state is `IDLE` and `go` events are ignored when the state is `READY`.
 
 ### Making images and finding parsing error messages with cogent.jar
 
@@ -1135,3 +1144,43 @@ For example, suppose the `unsigned int` type is 16 bits. Suppose a state is ente
 If more time is needed, `TIME_T` can be redefined as `unsigned long int` and `TO_DURATION` to tack `ul` on the end of the number. If that `unsigned long int` type is a 32-bit unsigned type, we would be good for durations up to about 2^32 ms or 49.7 days.
 
 This works because the subtraction of unsigned int from unsigned int gives an unsigned int.  If `TIME_T` were defined as `unsigned short` the story is different, since an unsigned short minus an unsigned short gives an int that might be negative. The conversion back to `TIME_T` should bring that int back to a positive number.
+
+## Syntax
+
+For the most part the syntax of cogent is defined by PlantUML.  Unfortunately no formal grammar for PlantUML exists, but its syntax is defined fairly precisely at[plantuml.com/state-diagram](https://plantuml.com/state-diagram).
+
+PlantUML allows almost any sequence of characters to label an edge.  Cogent parses these labels according to the following grammar
+
+```bnf
+   <edge_label> ::= [ <trigger> ] [ <guard> ] [ <actions> ]
+ 
+   <trigger> ::= "after" "(" <duration> ")" | triggger_ident 
+   <duration> ::= number ( "ms" | "s")
+
+   <guard> ::= "[" <possibly_else_guard> "]"
+   <possibly_else_guard> ::= "else" | <guard_0>
+   
+   <guard_0> ::= <guard_1> { <implies> <guard_1> }
+   <guard_1> ::= <guard_2> { <or> <guard_2> }
+   <guard_2> ::= <guard_3> { <and> <guard_3> }
+   <guard_3> ::= "not" <guard_3> | "OK" | "in" state_ident | <guard_ident> | "{" code "}" | "(" <guard_0> ")"
+
+   <implies> ::= "==>" | "implies"
+   <or> ::= ::= "||" | "or"
+   <and> ::= "&&" | "and"
+   <not> ::= "!" | "not"
+
+   <actions> ::= "/" <action> { ";" <action>} [";"]
+
+   <action> ::= <action_ident> | "{" code "}"
+
+```
+
+The remaining terminals are described as follows:
+* `state_ident` a maximal nonempty sequence of upper or lowwer case letters from "a" to "z", digits, and underscores ("_"), not starting with a digit.
+* `trgger_ident` the same as state_ident, but also allowing question marks ("?").
+* `action_ident` the same as `trigger_ident` but also allowing exclamation points ("!").
+* `number` A sequence of one or more digits, optonally followed by a period (".") followed by zero or more digits.
+* `code` all characters up to, but not including, the next "}".
+
+Each token can be preceeded by or followed by zero or more space characters.
