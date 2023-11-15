@@ -27,8 +27,9 @@ build:
     # Install SBT
     - apt-get update -yqq
     - apt-get install sbt -yqq
-    # Log the sbt version
-    - sbt sbtVersion
+    # Log the sbt version and the Scala version
+    - sbt --version
+    - scalac --version
   script:
     - mkdir bin
     - sbt assembly
