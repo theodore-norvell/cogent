@@ -356,7 +356,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
                 end for
 
                 if afterTriggers.size > 0 then 
-                    val durationList = afterTriggers.toSeq.map( tr => tr.asAfterTrigger.get.durationInMilliseconds )
+                    val durationList = afterTriggers.toSeq.map( tr => tr.durationInMilliseconds )
                     out.caseComm( "TICK" ) {
                         generateIfsForDurationList( durationList, state, stateChart )
                     }
