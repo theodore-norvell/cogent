@@ -340,10 +340,12 @@ class Backend( val logger : Logger, val out : COutputter ) :
         out.comment( s"Event handling code for state ${state.getCName}")
         out.endLine
         // First collect all the edges out of this state.
-        val edges = stateChart.edges.filter( e => e.source == state )
+        val edges = stateChart.edgeSet.filter( e => e.source == state )
         // Now all named triggers
-        val namedTriggers = edges.map(e => e.triggerOpt.flatMap( _.asNamedTrigger )).flatten
-        val afterTriggers = edges.map(e => e.triggerOpt.flatMap( _.asAfterTrigger )).flatten
+        val namedTriggers : Set[Trigger.NamedTrigger] =
+            edges.map(e => e.triggerOpt.flatMap( _.asNamedTrigger )).flatten
+        val afterTriggers : Set[Trigger.AfterTrigger] =
+            edges.map(e => e.triggerOpt.flatMap( _.asAfterTrigger )).flatten
         //println( s"State is ${state.getFullName} edges is $edges")
         //println( s"namedTriggers is $namedTriggers")
         //println( s"afterTriggers is $afterTriggers")
