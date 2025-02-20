@@ -1,5 +1,5 @@
 package cogent
-class Backend( val logger : Logger, val out : COutputter ) :
+class Backend( val logger : Logger, val out : COutputter, val generationOptions : GenerationOptions ) :
 
     private val boolType = "bool_t"
     private val trueConst = "true"
@@ -30,7 +30,7 @@ class Backend( val logger : Logger, val out : COutputter ) :
 
     def generateCCode( stateChart : StateChart, chartName : String, cogentVersion : String ) : Unit = {
 
-        generateComment( cogentVersion)
+        generateComment( cogentVersion )
 
         generateInclude( chartName )
 
@@ -67,8 +67,12 @@ class Backend( val logger : Logger, val out : COutputter ) :
     }
 
     def generateComment( cogentVersion : String ) : Unit = {
-        val dateStr = java.time.ZonedDateTime.now.toString() 
-        out.comment( s"Generated $dateStr by\n   Cogent version $cogentVersion" )
+        if generationOptions.outputGenerationDate then 
+            val dateStr = java.time.ZonedDateTime.now.toString() 
+            out.comment( s"Generated $dateStr by" )
+            out.blankLine
+        end if
+        out.comment( s"Cogent version $cogentVersion" )
         out.blankLine
     }
 

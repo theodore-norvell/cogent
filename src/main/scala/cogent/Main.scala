@@ -13,6 +13,7 @@ import Logger.Level._
 object Main :
     def main( args : Array[String] ) : Unit =
         val logger : Logger = new LogToStdError( Info )
+        val generationOptions = new GenerationOptions()
         val commit = gitCommit.gitCommit( )
         logger.log( Info, s"Cogent version $commit.")
         var argCounter = 0
@@ -30,6 +31,8 @@ object Main :
                 logger.setLogLevel( Info )
             else if args(argCounter) == "--debug" then
                 logger.setLogLevel( Debug )
+            else if args(argCounter) == "--date" then
+                generationOptions.outputGenerationDate = true
             else if args(argCounter) == "--help" then
                 printHelp(logger)
                 return ()
@@ -108,7 +111,7 @@ object Main :
                         val outFile = new File( outFileName )
                         import java.io.PrintWriter
                         val cout = COutputter( new PrintWriter( outFile ) )
-                        val backend = Backend( logger, cout )
+                        val backend = Backend( logger, cout, generationOptions )
                         backend.generateCCode( stateChart, chartName, commit ) 
                         logger.log( Info, "Code generation complete." )
     end main
@@ -124,6 +127,7 @@ object Main :
         logger.info( "    --warning - fatal and warning errors are reported" )
         logger.info( "    --info    - fatal, warning and info messages are reported. This is the default." )
         logger.info( "    --debug   - debug messages are also reported" )
+        logger.info( "    --date    - the date and time of code generation are placed in the generated file" )
         logger.info( "    --help    - print this message and exit")
         logger.info( "To generate png files use:")
         logger.info( "    java -cp cogent.jar net.sourceforge.plantuml.Run *.puml" )
