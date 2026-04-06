@@ -1,7 +1,7 @@
 package cogent
 
 import scala.collection.mutable
-import scala.util.control.NonLocalReturns._
+import scala.util.boundary
 
 class Combiner( val logger : Logger ) :
 
@@ -9,35 +9,36 @@ class Combiner( val logger : Logger ) :
     type UseToDefinitionMap = mutable.Map[(StateChart,Node), String]
 
     def combine( stateChartList : List[StateChart] )
-    : Option[StateChart] = returning {
-        val primaryStateMachine = stateChartList.head
-        val len = stateChartList.length
-        val submachineDefinitions = stateChartList.slice(1, len)
-        val defMap = createDefinitionMap( submachineDefinitions )
-        if logger.hasFatality  then
-            None
-        else
-            val useToDefMap = makeUseToDefinitionMap( stateChartList, defMap )
-            if logger.hasFatality then
+    : Option[StateChart] = {
+        boundary :
+            val primaryStateMachine = stateChartList.head
+            val len = stateChartList.length
+            val submachineDefinitions = stateChartList.slice(1, len)
+            val defMap = createDefinitionMap( submachineDefinitions )
+            if logger.hasFatality  then
                 None
             else
-                val orderedSubMachineDefinitions = topologicalSort( submachineDefinitions, useToDefMap, defMap )
+                val useToDefMap = makeUseToDefinitionMap( stateChartList, defMap )
                 if logger.hasFatality then
                     None
                 else
-                    // Process from the bottom of the DAG up to the root.
-                    val statecharts = orderedSubMachineDefinitions.reverse
-                    for sc <- statecharts do
-                        val scExpandedOpt = expand( sc, useToDefMap, defMap, false )
-                        // Update the map 
-                        if scExpandedOpt.nonEmpty then
-                            for name <- defMap.keySet do
-                                if defMap(name) == sc then
-                                    defMap(name) = scExpandedOpt.head
-                        else
-                            throwReturn[Option[StateChart]]( None )
-                    val expandedOpt = expand(primaryStateMachine, useToDefMap, defMap, true )
-                    expandedOpt
+                    val orderedSubMachineDefinitions = topologicalSort( submachineDefinitions, useToDefMap, defMap )
+                    if logger.hasFatality then
+                        None
+                    else
+                        // Process from the bottom of the DAG up to the root.
+                        val statecharts = orderedSubMachineDefinitions.reverse
+                        for sc <- statecharts do
+                            val scExpandedOpt = expand( sc, useToDefMap, defMap, false )
+                            // Update the map 
+                            if scExpandedOpt.nonEmpty then
+                                for name <- defMap.keySet do
+                                    if defMap(name) == sc then
+                                        defMap(name) = scExpandedOpt.head
+                            else
+                                boundary.break( None )
+                        val expandedOpt = expand(primaryStateMachine, useToDefMap, defMap, true )
+                        expandedOpt
     }
 
     private def createDefinitionMap( submachineDefinitions : List[StateChart] )
