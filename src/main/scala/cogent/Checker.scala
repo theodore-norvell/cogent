@@ -135,8 +135,8 @@ class Checker( val logger : Logger ) :
 
 
     def checkEdgesOutOfStatesHaveNoElseGuards(  stateChart : StateChart ) : Unit = {
-        val edgesFromNonStates = stateChart.edges.filter( e => ! e.source.isState )
-        for e <- edgesFromNonStates do
+        val edgesFromStates = stateChart.edges.filter( e => e.source.isState )
+        for e <- edgesFromStates do
             if ! e.guardOpt.isEmpty then
                 e.guardOpt.get match {
                     case Guard.ElseGuard() =>
