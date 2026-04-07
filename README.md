@@ -267,6 +267,9 @@ The behaviour of the generated code can be traced by defining the following macr
 * LOG_ACTION_DONE( str )
 * LOG_ENTER_STATE( str )
 * LOG_EXIT_STATE( str )
+* LOG_ACTION_START( str )
+* LOG_GUARD_START( str )
+* LOG_GUARD_TRUE( str )
 
 In each case the result should be a single complete statement.  The default definition in each case is the
 do-nothing command {}. The argument
