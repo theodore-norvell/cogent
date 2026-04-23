@@ -595,7 +595,7 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
     def generateGuardExpression( guard : Guard, stateChart : StateChart, sourceNode : Node ) : Unit = {
         out.endLine
         out.indent
-        out.putLine( s"${logGuardStartMacro}( \"${guard.toString()}\")," )
+        out.putLine( s"(${logGuardStartMacro}( \"${guard.toString()}\")," )
         gge( guard )
         out.put(")")
         out.dedent
