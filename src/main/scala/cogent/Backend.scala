@@ -98,7 +98,7 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
         declMacro( guardMacro, "(name)", "name" )
         declMacro( actionMacro, "(name)", "name" )
         declMacro( logActionStartMacro, "(actionString)", "{}" )
-        declMacro( logGuardStartMacro, "(guardString)", "{}" )
+        declMacro( logGuardStartMacro, "(guardString)", "(0)" )
         declMacro( logGuardTrueMacro, "(guardString)", "{}" )
         declMacro( logActionDoneMacro, "(actionString)", "{}" )
         declMacro( logEnterStateMacro, "(actionString)", "{}" )
@@ -507,7 +507,6 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
             // For each edge that is not guarded by an else, output "if(...) {...} else "
             for edge <- conditionalEdges do
                 val guard = edge.guardOpt.head
-                out.putLine( s"${logGuardStartMacro}( \"${guard.toString()}\")" )
                 out.ifComm{ generateGuardExpression( guard, stateChart, node ) }{
                     out.putLine( s"${logGuardTrueMacro}( \"${guard.toString()}\")" )
                     if node.isState then
@@ -596,7 +595,9 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
     def generateGuardExpression( guard : Guard, stateChart : StateChart, sourceNode : Node ) : Unit = {
         out.endLine
         out.indent
+        out.putLine( s"${logGuardStartMacro}( \"${guard.toString()}\")," )
         gge( guard )
+        out.put(")")
         out.dedent
         out.endLine
 
