@@ -19,6 +19,8 @@ trait Logger :
 
     def log( level : Logger.Level,  message : String ) : Unit 
 
+    def never( message : String ) : Unit = log( Never, message )
+
     def fatal( message : String ) : Unit = log( Fatal, message )
 
     def warning( message : String ) : Unit = log( Warning, message )

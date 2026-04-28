@@ -5,6 +5,8 @@ class Checker( val logger : Logger ) :
     import scala.collection.mutable
     import Logger.Level._
 
+    private val cIdentRX =  """[a-zA-Z_][a-zA-Z_0-9]*""".r
+    
     private val keyWordsOfC : scala.collection.immutable.HashSet[String] 
     = scala.collection.immutable.HashSet[String](
         "auto", "break", "case", "char", "const", "continue", "default", 
@@ -21,17 +23,9 @@ class Checker( val logger : Logger ) :
         checkAllEdgesReachable( stateChart )
         checkAllEdgesOutOfStatesHaveTriggers( stateChart )
         checkOnlyEdgesOutOfStatesHaveTriggers( stateChart )
-        checkEdgesOutOfStatesHaveNoElseGuards( stateChart )
+        // checkEdgesOutOfStatesHaveNoElseGuards( stateChart )
         // Other things to check:
-        // (a) Define a bundle to be a set of all transitions out
-        //     of a state that have the same trigger or a set of
-        //     all transitions out of a branch node.
-        //     (i) Each bundle with size greater than one should have
-        //         a guard on every edge.
-        //     (ii) At most one edge in each bundle is labelled with "else".
-        // (b) There are no duplicate node names.  (Need to check the actual names, not the C names.)
-        // (c) That named triggers, guards, and actions are all valid C names.
-        //     and not C keywords.
+        // (a) There are no duplicate node names.  (Need to check the actual names, not the C names.)
     end check
 
     def childrenOfANDsAreORs(  stateChart : StateChart ) : Unit = {
@@ -46,7 +40,6 @@ class Checker( val logger : Logger ) :
 
     def checkValidCNamesForStatesAndChoices(  stateChart : StateChart ) : Unit = {
         logger.log( Debug, "Checking for valid C names for states")
-        val regEx = """[a-zA-Z_][a-zA-Z_0-9]*""".r
         for node <- stateChart.nodes do
             if node.isState || node.isChoicePseudostate then 
                 val name = node.getCName 
@@ -58,8 +51,6 @@ class Checker( val logger : Logger ) :
         end for
         // TODO And do the same for actions and guards.
     }
-    
-    private val cIdentRX =  """[a-zA-Z_][a-zA-Z_0-9]*""".r
     
     def isValidCIdentifier(name : String) : Boolean =
         cIdentRX.matches( name ) && ! (keyWordsOfC contains name)
@@ -134,18 +125,18 @@ class Checker( val logger : Logger ) :
     }
 
 
-    def checkEdgesOutOfStatesHaveNoElseGuards(  stateChart : StateChart ) : Unit = {
-        val edgesFromStates = stateChart.edges.filter( e => e.source.isState )
-        for e <- edgesFromStates do
-            if ! e.guardOpt.isEmpty then
-                e.guardOpt.get match {
-                    case Guard.ElseGuard() =>
-                        logger.warning( s"Edge $e exits a state, but is guarded by an 'else'. It will be interpreted as the default transition among all transitions that have the same trigger." )
-                    case _ => ()
-                }
-            end if
-        end for
-    }
+    // def checkEdgesOutOfStatesHaveNoElseGuards(  stateChart : StateChart ) : Unit = {
+    //     val edgesFromStates = stateChart.edges.filter( e => e.source.isState )
+    //     for e <- edgesFromStates do
+    //         if ! e.guardOpt.isEmpty then
+    //             e.guardOpt.get match {
+    //                 case Guard.ElseGuard() =>
+    //                     logger.warning( s"Edge $e exits a state, but is guarded by an 'else'. It will be interpreted as the default transition among all transitions that have the same trigger." )
+    //                 case _ => ()
+    //             }
+    //         end if
+    //     end for
+    // }
 
 
 end Checker

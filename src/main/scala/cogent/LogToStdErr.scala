@@ -23,6 +23,6 @@ class LogToStdError( var maxLevel : Logger.Level )
             case Level.Warning => {color = WARNCOLOR ; endColor = ENDCOLOR ; }
             case _ => {}
         if level.ordinal <= maxLevel.ordinal then
-            System.err.println( s"$color[$level] $message$endColor") 
+            System.err.println( s"$color[$level]$endColor $message") 
         if level == Logger.Level.Fatal then
             fatalCount += 1

@@ -102,8 +102,11 @@ object parsers extends RegexParsers:
     private def stateIdent : Parser[ String ] =
         ident("")
 
+    private val keywords = Set("and", "else", "implies", "in", "not", "or", "OK")
+
     private def ident(others:String) : Parser[ String ] =
-        regex( ("[a-zA-Z_"+others+"][a-zA-Z_0-9"+others+"]*").r )
+        regex( ("[a-zA-Z_"+others+"][a-zA-Z_0-9"+others+"]*").r ).
+           filter((p) => ! keywords.contains(p) )
 
     private def keyword( kw : String) : Parser[ String ] =
         regex("""[a-zA-Z_]\w*""".r).filter( str => str.equals(kw))

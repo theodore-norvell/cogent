@@ -406,10 +406,14 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
                                 case _ =>
                                     false
                                 }).getOrElse( false ) ) ;
-        val intDuration : Int = durationInMilliseconds.asInstanceOf[Int]
+        var intDuration : Int = durationInMilliseconds.asInstanceOf[Int]
         
         if intDuration.asInstanceOf[Double] != durationInMilliseconds then
             logger.warning( s"Duration $durationInMilliseconds ms rounded to $intDuration ms" )
+        
+        if intDuration < 0 then
+            logger.warning( s"Duration $intDuration ms is negative" )
+            intDuration = 0 
 
         out.comment( s"Code for after( $durationInMilliseconds ms )" )
         out.endLine
@@ -469,7 +473,11 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
                                                     case _ => false } ).getOrElse( false ) ) ;
         val nonElseGuardedEdges = edges.filter( e => ( elseGuardedEdges.contains(e) .unary_! ) )
         val unguardedEdges = nonElseGuardedEdges.filter( e => e.guardOpt.isEmpty )
-        val conditionalEdges = nonElseGuardedEdges.filter( e => (unguardedEdges.contains(e).unary_!) )
+        val conditionalEdges0 = nonElseGuardedEdges.filter( e => (unguardedEdges.contains(e).unary_!) )
+        // Sort by entailment so that e.g.: a and b will be before a.
+        // There will be a likely be a warning when there is entailment,
+        // but people don't always heed warnings.
+        val conditionalEdges = Satisfaction.sort_by_entailment( logger, conditionalEdges0 )
         assert(elseGuardedEdges.size + unguardedEdges.size + conditionalEdges.size == edges.size)
         if unguardedEdges.size > 1 then 
             // Case: More than one unguarded edges.
@@ -496,13 +504,28 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
             assert( elseGuardedEdges.size < 2 )
             if conditionalEdges.size == 0 then
                 logger.warning( s"$locationForMessages has only a transition guarded by 'else'; this guard is not needed.")
-            // TODO check guards for
-            //  Overlap -- there exists a state where 2 or more guards could both be true
-            //  Underlap -- there exists a state where all guards are false and there is no else. (This would be info for states and warning for branch nodes)
-            //  Pointless else -- in all states at least one guard is true, but there is an else.
-            // Of course the best we can do is look for propositional tautologies.
-            //   Overlap could exist unless !(P and Q) is a tautology.
-            //   Underlap could exist unless (P or Q or R ...) is a tautology.
+            //  Check for propositional Ambiguity -- there exists a vertex where 2 or more guards could both be true
+            //  (This check should be in the checker, but it is more convenient here.)
+            for i <- 0 until conditionalEdges.length-1 do
+                for j <- i+1 until conditionalEdges.length do
+                    val e0 = conditionalEdges(i)
+                    val e1 = conditionalEdges(j)
+                    val g0 = e0.guardOpt.head
+                    val g1 = e1.guardOpt.head
+                    if Satisfaction.ambiguity(logger, g0, g1) then
+                        logger.warning( s"$locationForMessages: propositionally, possibly 2 guards are true. If so behaviour will be nondeterministic. The guards are $g0 and $g1")
+            val guards = conditionalEdges.map( _.guardOpt.head)
+            if elseGuardedEdges.size == 0 then
+                //  Check for Underlap -- there exists a choice node where all guards could be false and there is no else.
+                //  (This check should be in the checker, but it is more convenient here.)
+                if node.isChoicePseudostate then
+                    if Satisfaction.possibly_none(logger, guards) then
+                        logger.warning( s"$locationForMessages: propositionally, all guards could be false. If so, the generated code will fail.")
+            else
+                //  Check for pointless else -- in all states at least one guard is true, but there is an else.
+                //  (This check should be in the checker, but it is more convenient here.)
+                if Satisfaction.definitely_at_least_one(logger, guards) then
+                    logger.warning( s"$locationForMessages: else branch can not be taken.")
 
             // For each edge that is not guarded by an else, output "if(...) {...} else "
             for edge <- conditionalEdges do
@@ -524,7 +547,7 @@ class Backend( val logger : Logger, val out : COutputter, val generationOptions 
                 }
             else
                 out.block{
-                    logger.warning( s"$locationForMessages has no else guarded transition. If none of the guards are true, the code will crash." )
+                    // No longer needed? logger.warning( s"$locationForMessages has no else guarded transition. If none of the guards are true, the code will crash." )
                     out.putLine( "assertUnreachable() ;" )
                  }
             end if
