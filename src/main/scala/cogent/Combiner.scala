@@ -280,8 +280,22 @@ class Combiner( val logger : Logger ) :
     }
 
     def modifyGuard( guard : Guard, suffix : String  ) : Guard = {
-        // TODO
-        guard
+        import Guard.*
+
+        guard match
+            case ElseGuard() => guard
+            case OKGuard( ) => guard
+            case InGuard( name : String ) => InGuard( name + suffix )
+            case NamedGuard( name : String ) => guard
+            case RawGuard( rawCCode : String ) => guard
+            case NotGuard( operand : Guard ) =>
+                NotGuard( modifyGuard(operand, suffix) )
+            case AndGuard( left : Guard, right : Guard ) =>
+                AndGuard( modifyGuard(left, suffix), modifyGuard(right, suffix) )
+            case OrGuard( left: Guard, right : Guard ) =>
+                OrGuard( modifyGuard(left, suffix), modifyGuard(right, suffix) )
+            case ImpliesGuard( left : Guard, right : Guard ) =>
+                ImpliesGuard( modifyGuard(left, suffix), modifyGuard(right, suffix) )
     }
 
     def computeEntryExitMap(
