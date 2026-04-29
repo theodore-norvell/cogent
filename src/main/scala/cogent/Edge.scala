@@ -8,11 +8,12 @@ case class Edge(
     val actions : Seq[Action]
 ) :
     override def toString : String =
-        s"${source.getFullName} --"
+        s"${source.getFullName}--"
         + triggerOpt.getOrElse("--")
-        + guardOpt.map( (x) => x.toString()).getOrElse("--")
-        + actions.fold("")( (x,y) => s"$x;$y")
-        + s"->${target.getFullName}"
+        + guardOpt.map( (x) => x.toString() ).getOrElse("--")
+        + (if actions.isEmpty then "--" else "/-")
+        + actions.foldRight("-")( (x,y) => s"$x;-$y")
+        + s">${target.getFullName}"
 end Edge
 
 
