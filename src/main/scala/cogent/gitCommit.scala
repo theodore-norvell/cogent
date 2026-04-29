@@ -21,5 +21,4 @@ object gitCommit {
                 '{"commit is not available"}
         }
     }
-  
 }
