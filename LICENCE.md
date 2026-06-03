@@ -1,9 +1,9 @@
-Copyright 2021--2023 Theodore S. Norvell
+Copyright 2021--2026 Theodore S. Norvell
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
-1. This software may not be used by any military organization. Nor may this software be used in the design and implementation of any weapons system.
-2. Any software produced using this software may not be used by any military organization. Nor may any software produced using this software be used in the design and implementation of any weapons system.
+1. This software may not be used by any military organization. Nor may this software be used in the design or implementation of any weapons system, other military system, or any system developed under contract with any military organization. This applies to subcontracts, subsubcontracts, etc.
+2. Any software produced using this software may not be used by any military organization. Nor may any software produced using this software be used in the design or implementation of any weapons system, other military system, or any system developed under contract with any military organization. This applies to subcontracts, subsubcontracts, etc.
 3. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
 4. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
 5. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
