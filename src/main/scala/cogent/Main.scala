@@ -91,29 +91,31 @@ object Main :
                 logger.info( "Extraction successful. Expanding submachine references." ) 
                 val combiner = Combiner( logger )
                 val optStateChart = combiner.combine( stateChartList )
+
                 if ! logger.hasFatality then
                     assert( ! optStateChart.isEmpty ) 
 
                     logger.info( "Expansion complete. Preparing for code generation.")
-
                     val stateChart = middleEnd.prepareForBackEnd( optStateChart.head )
 
-                    logger.debug( "The prepared statechart is" )
-                    logger.debug( stateChart.show )
-
-                    // Step 3: Check that the StateChart is well formed.
-                    logger.info( "Preparation complete. Checking for errors.")
-                    val checker = Checker( logger )
-                    checker.check( stateChart )
                     if ! logger.hasFatality then
-                        // Step 4: Convert to a C file
-                        logger.log( Info, "Checking complete. Code generation begins." )
-                        val outFile = new File( outFileName )
-                        import java.io.PrintWriter
-                        val cout = COutputter( new PrintWriter( outFile ) )
-                        val backend = Backend( logger, cout, generationOptions )
-                        backend.generateCCode( stateChart, chartName, commit ) 
-                        logger.log( Info, "Code generation complete." )
+                        logger.debug( "The prepared statechart is" )
+                        logger.debug( stateChart.show )
+
+                        // Step 3: Check that the StateChart is well formed.
+                        logger.info( "Preparation complete. Checking for errors.")
+                        val checker = Checker( logger )
+                        checker.check( stateChart )
+
+                        if ! logger.hasFatality then
+                            // Step 4: Convert to a C file
+                            logger.log( Info, "Checking complete. Code generation begins." )
+                            val outFile = new File( outFileName )
+                            import java.io.PrintWriter
+                            val cout = COutputter( new PrintWriter( outFile ) )
+                            val backend = Backend( logger, cout, generationOptions )
+                            backend.generateCCode( stateChart, chartName, commit ) 
+                            logger.log( Info, "Code generation complete." )
     end main
 
     private def printHelp( logger : Logger ) : Unit = 

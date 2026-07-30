@@ -64,6 +64,17 @@ class Checker( val logger : Logger ) :
             }
     }
 
+    def checkStartEdgesEndAtAState(  stateChart : StateChart ) : Unit = {
+        val edgesFromStart = stateChart.edges.filter( e => e.source.isStartMarker )
+        for e <- edgesFromStart do
+            e match {
+                case Edge(_, node, _, _, _) => 
+                    if ! node.isState then
+                        logger.log( Fatal, s"Edge $e from a start pseudo-state does not end at a state." )
+
+            }
+    }
+
     def checkNoEdgesToStart(  stateChart : StateChart ) : Unit = {
         val edgesToStart = stateChart.edges.filter( e => e.target.isStartMarker )
         for e <- edgesToStart do

@@ -1,0 +1,31 @@
+@startuml SAP
+state SAP {
+
+    state SENDING {
+
+        [*] --> START_SENDING
+
+        state START_SENDING 
+
+        state WAIT_FOR_MORE_ACKS
+        'state WAIT_FOR_MORE_ACKS_C <<choice>>
+
+        state SEND_REMAINING_FRAGS
+
+        state WAIT_BEFORE_RESEND 
+    }
+
+    state RECEIVING_FRAGS 
+
+    [*] --> SENDING 
+
+    /' Transitions '/
+
+    SENDING --> RECEIVING_FRAGS : RECV_FRAG [sap_fragIsForNextMessage?] / sap_beginReceivingNextMessage ; sap_startTATimer
+
+    RECEIVING_FRAGS --> RECEIVING_FRAGS : RECV_FRAG [sap_checkTATimer?] / sap_processFragment ; sap_startTATimer
+    RECEIVING_FRAGS --> SENDING : [!sap_checkTATimer? && sap_allSegmentsReceived? && sap_newMessage?] / sap_increaseMid
+    RECEIVING_FRAGS --> RECEIVING_FRAGS : [!sap_checkTATimer?] / sap_sendAck ; sap_startTATimer
+
+}
+@enduml
